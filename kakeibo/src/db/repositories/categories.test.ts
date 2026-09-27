@@ -21,6 +21,8 @@ let db: KakeiboDBConnection;
 
 beforeEach(async () => {
   db = await openKakeiboDB(testDbName);
+  // 既定のカテゴリを消し、空の状態から始める。
+  await db.clear('categories');
 });
 
 afterEach(async () => {

@@ -67,6 +67,7 @@ describe('openKakeiboDB', () => {
 
   it('keeps data when reopened', async () => {
     db = await openKakeiboDB(testDbName);
+    await db.clear('categories');
     await db.put('categories', {
       id: 'c',
       name: '食費',
