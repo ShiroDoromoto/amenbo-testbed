@@ -21,3 +21,15 @@ npm run build      # dist/ にビルドする
 CI（`.github/workflows/kakeibo-ci.yml`）は、lint・整形の確認・型チェック・テスト・ビルドを回す。
 
 書式は Prettier に任せ、ESLint は書式を見ない（`eslint-config-prettier` で書式のルールを切っている）。
+
+## データのスキーマを変える
+
+データは IndexedDB に置く（`src/db/`）。スキーマのバージョンは、`src/db/migrations/` にある移行の数で決まる。
+
+ストアや索引を変えるとき、既存のデータを書き換えるときは、次の手順で移行を足す。
+
+1. `src/db/migrations/vN.ts` を作り、`version: N` の移行を書く（N は今の最後のバージョン + 1）。
+2. `src/db/migrations/index.ts` の `migrations` の末尾に加える。
+
+DB を開くと、保存されているバージョンより新しい移行だけが古い順に当たる。
+どれかが失敗すると、DB は開く前のバージョンのまま残る。当て済みの移行は書き換えない。
