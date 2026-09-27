@@ -3,6 +3,7 @@ import { pathFromHash, type Route } from '../router/index.ts';
 import { AccountList } from '../pages/accounts/AccountList.tsx';
 import { EditAccountPage } from '../pages/accounts/EditAccountPage.tsx';
 import { NewAccountPage } from '../pages/accounts/NewAccountPage.tsx';
+import { CategoryList } from '../pages/categories/CategoryList.tsx';
 import { EditRecurringPage } from '../pages/recurring/EditRecurringPage.tsx';
 import { NewRecurringPage } from '../pages/recurring/NewRecurringPage.tsx';
 import { RecurringList } from '../pages/recurring/RecurringList.tsx';
@@ -16,6 +17,7 @@ const pages: Readonly<Record<string, () => ComponentChildren>> = {
   '/transactions/new': () => <NewTransactionPage />,
   '/recurring': () => <RecurringList />,
   '/accounts': () => <AccountList />,
+  '/categories': () => <CategoryList />,
 };
 
 // 画面がまだ無い項目は、見出しだけを出す。

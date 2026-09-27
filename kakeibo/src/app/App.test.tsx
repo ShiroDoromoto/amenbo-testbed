@@ -56,6 +56,7 @@ test.each([
   ['#/accounts', '口座'],
   ['#/accounts/new', '口座の追加'],
   ['#/accounts/abc', '口座の編集'],
+  ['#/categories', 'カテゴリ'],
 ])('%s では、%s の画面を出す', (hash, heading) => {
   window.location.hash = hash;
   const root = renderApp();
