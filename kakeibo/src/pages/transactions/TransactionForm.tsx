@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { useId, useRef, useState } from 'preact/hooks';
+import { useToast } from '../../components/Toast/index.ts';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
 import type { IncomeExpenseType } from '../../domain/transaction.ts';
@@ -28,14 +29,19 @@ type Props = {
   onSubmit: (transaction: NewTransaction) => void | Promise<void>;
 };
 
-/** 取引を1件入力するフォーム。入力を確かめ、通ったものだけを `onSubmit` に渡す。 */
+/**
+ * 取引を1件入力するフォーム。入力を確かめ、通ったものだけを `onSubmit` に渡す。
+ * 保存できたらフォームを初めの状態に戻し、トーストで知らせる。
+ * `ToastProvider` の中で使う。
+ */
 export function TransactionForm({ categories, accounts, initialDate, onSubmit }: Props) {
-  const [input, setInput] = useState<TransactionInput>({
+  const emptyInput: TransactionInput = {
     date: initialDate,
     amount: '',
     categoryId: '',
     accountId: accounts[0]?.id ?? '',
-  });
+  };
+  const [input, setInput] = useState<TransactionInput>(emptyInput);
   const [type, setType] = useState<IncomeExpenseType>('expense');
   const [memo, setMemo] = useState('');
   const [saving, setSaving] = useState(false);
@@ -43,6 +49,7 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
   const [submitted, setSubmitted] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const id = useId();
+  const toast = useToast();
 
   const validation = validateTransactionInput(input);
   const errors: TransactionInputErrors = submitted && !validation.ok ? validation.errors : {};
@@ -63,9 +70,22 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
     setSaving(true);
     try {
       await onSubmit({ ...validation.value, type, memo: memo.trim() });
+    } catch {
+      // 入力は残し、直すか押し直せるようにする。
+      toast.show('保存できませんでした', { kind: 'error' });
+      return;
     } finally {
       setSaving(false);
     }
+    reset();
+    toast.show('保存しました', { kind: 'success' });
+  }
+
+  function reset() {
+    setInput(emptyInput);
+    setType('expense');
+    setMemo('');
+    setSubmitted(false);
   }
 
   /** 入力欄に付ける属性。エラーがあれば、読み上げでもエラーが伝わるようにする。 */
