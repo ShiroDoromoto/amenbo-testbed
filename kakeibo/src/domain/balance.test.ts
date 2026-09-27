@@ -3,9 +3,30 @@ import type { Account } from './account.ts';
 import { calculateBalances } from './balance.ts';
 import type { Transaction } from './transaction.ts';
 
-const wallet: Account = { id: 'wallet', name: '財布', type: 'cash', initialBalance: 5000 };
-const bank: Account = { id: 'bank', name: '銀行', type: 'bank', initialBalance: 100000 };
-const card: Account = { id: 'card', name: 'カード', type: 'card', initialBalance: -20000 };
+const wallet: Account = {
+  id: 'wallet',
+  name: '財布',
+  type: 'cash',
+  initialBalance: 5000,
+  closingDay: null,
+  paymentDay: null,
+};
+const bank: Account = {
+  id: 'bank',
+  name: '銀行',
+  type: 'bank',
+  initialBalance: 100000,
+  closingDay: null,
+  paymentDay: null,
+};
+const card: Account = {
+  id: 'card',
+  name: 'カード',
+  type: 'card',
+  initialBalance: -20000,
+  closingDay: null,
+  paymentDay: null,
+};
 
 let nextId = 0;
 

@@ -63,7 +63,14 @@ test('入力した口座を足し、口座の一覧に戻る', async () => {
   const saved = await listAccounts(check);
   check.close();
   expect(saved).toEqual([
-    { id: saved[0]!.id, name: '楽天カード', type: 'card', initialBalance: -35000 },
+    {
+      id: saved[0]!.id,
+      name: '楽天カード',
+      type: 'card',
+      initialBalance: -35000,
+      closingDay: null,
+      paymentDay: null,
+    },
   ]);
   expect(document.body.textContent).toContain('保存しました');
 });

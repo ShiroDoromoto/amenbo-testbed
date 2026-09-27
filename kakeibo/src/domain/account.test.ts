@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accountTypes, isAccountType, isInitialBalance } from './account.ts';
+import { accountTypes, isAccountType, isBillingDay, isInitialBalance } from './account.ts';
 
 describe('isAccountType', () => {
   it.each(accountTypes)('accepts %s', (type) => {
@@ -22,4 +22,14 @@ describe('isInitialBalance', () => {
       expect(isInitialBalance(value)).toBe(false);
     },
   );
+});
+
+describe('isBillingDay', () => {
+  it.each([null, 1, 15, 31])('accepts %s', (value) => {
+    expect(isBillingDay(value)).toBe(true);
+  });
+
+  it.each([0, 32, 1.5, -1, '10', undefined])('rejects %s', (value) => {
+    expect(isBillingDay(value)).toBe(false);
+  });
 });

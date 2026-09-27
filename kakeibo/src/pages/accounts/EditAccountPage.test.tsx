@@ -80,6 +80,8 @@ test('直した内容で口座を置き換え、口座の一覧に戻る', async
     name: 'ゆうちょ銀行',
     type: 'bank',
     initialBalance: 50000,
+    closingDay: null,
+    paymentDay: null,
   });
   expect(document.body.textContent).toContain('保存しました');
 });

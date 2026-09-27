@@ -1,7 +1,8 @@
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
-import { deleteDB } from 'idb';
-import { dbVersion, openKakeiboDB, type KakeiboDBConnection } from './index.ts';
+import { deleteDB, openDB } from 'idb';
+import { dbVersion, openKakeiboDB, type KakeiboDB, type KakeiboDBConnection } from './index.ts';
+import { applyMigrations, migrations } from './migrations/index.ts';
 import type { IncomeExpenseTransaction } from '../domain/transaction.ts';
 
 const testDbName = 'kakeibo-test';
@@ -41,12 +42,21 @@ describe('openKakeiboDB', () => {
 
   it('keys records by id', async () => {
     db = await openKakeiboDB(testDbName);
-    await db.put('accounts', { id: 'a', name: '財布', type: 'cash', initialBalance: 0 });
+    await db.put('accounts', {
+      id: 'a',
+      name: '財布',
+      type: 'cash',
+      initialBalance: 0,
+      closingDay: null,
+      paymentDay: null,
+    });
     expect(await db.get('accounts', 'a')).toEqual({
       id: 'a',
       name: '財布',
       type: 'cash',
       initialBalance: 0,
+      closingDay: null,
+      paymentDay: null,
     });
   });
 
@@ -105,5 +115,24 @@ describe('openKakeiboDB', () => {
 
     db = await openKakeiboDB(testDbName);
     expect(await db.count('categories')).toBe(1);
+  });
+
+  it('leaves the closing and payment days of existing accounts unset', async () => {
+    const old = await openDB<KakeiboDB>(testDbName, 4, {
+      upgrade(db, oldVersion, newVersion, tx) {
+        void applyMigrations(migrations, db, tx, oldVersion, newVersion ?? oldVersion);
+      },
+    });
+    // 締め日と引き落とし日を足す前の形の口座。
+    const before = { id: 'card', name: 'カード', type: 'card', initialBalance: -20000 };
+    await old.put('accounts', before as KakeiboDB['accounts']['value']);
+    old.close();
+
+    db = await openKakeiboDB(testDbName);
+    expect(await db.get('accounts', 'card')).toEqual({
+      ...before,
+      closingDay: null,
+      paymentDay: null,
+    });
   });
 });
