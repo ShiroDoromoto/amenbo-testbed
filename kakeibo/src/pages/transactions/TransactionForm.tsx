@@ -21,29 +21,43 @@ const typeLabels: Record<IncomeExpenseType, string> = {
 /** 画面に並ぶ順。保存できなかったとき、この順で最初にエラーのある欄に移る。 */
 const fieldOrder: readonly TransactionInputField[] = ['date', 'amount', 'categoryId', 'accountId'];
 
+/** 欄の初期値。取引を編集するときは、その取引の値を渡す。 */
+export type TransactionFormDefaults = {
+  /** `YYYY-MM-DD` 形式。 */
+  date: string;
+  /** 省略すると支出。 */
+  type?: IncomeExpenseType;
+  amount?: number;
+  categoryId?: string;
+  /** 省略すると、口座の先頭。 */
+  accountId?: string;
+  memo?: string;
+};
+
 type Props = {
   categories: readonly Category[];
   accounts: readonly Account[];
-  /** 日付の初期値。`YYYY-MM-DD` 形式。 */
-  initialDate: string;
+  defaults: TransactionFormDefaults;
   onSubmit: (transaction: NewTransaction) => void | Promise<void>;
 };
 
 /**
  * 取引を1件入力するフォーム。入力を確かめ、通ったものだけを `onSubmit` に渡す。
- * 保存できたらフォームを初めの状態に戻し、トーストで知らせる。
+ * 保存できたらフォームを `defaults` の状態に戻し、トーストで知らせる。
  * `ToastProvider` の中で使う。
  */
-export function TransactionForm({ categories, accounts, initialDate, onSubmit }: Props) {
-  const emptyInput: TransactionInput = {
-    date: initialDate,
-    amount: '',
-    categoryId: '',
-    accountId: accounts[0]?.id ?? '',
+export function TransactionForm({ categories, accounts, defaults, onSubmit }: Props) {
+  const initialInput: TransactionInput = {
+    date: defaults.date,
+    amount: defaults.amount === undefined ? '' : String(defaults.amount),
+    categoryId: defaults.categoryId ?? '',
+    accountId: defaults.accountId ?? accounts[0]?.id ?? '',
   };
-  const [input, setInput] = useState<TransactionInput>(emptyInput);
-  const [type, setType] = useState<IncomeExpenseType>('expense');
-  const [memo, setMemo] = useState('');
+  const initialType = defaults.type ?? 'expense';
+  const initialMemo = defaults.memo ?? '';
+  const [input, setInput] = useState<TransactionInput>(initialInput);
+  const [type, setType] = useState<IncomeExpenseType>(initialType);
+  const [memo, setMemo] = useState(initialMemo);
   const [saving, setSaving] = useState(false);
   // 保存を押すまではエラーを出さない。押したあとは入力を変えるたびに確かめ直し、直した欄のエラーを消す。
   const [submitted, setSubmitted] = useState(false);
@@ -89,9 +103,9 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
   }
 
   function reset() {
-    setInput(emptyInput);
-    setType('expense');
-    setMemo('');
+    setInput(initialInput);
+    setType(initialType);
+    setMemo(initialMemo);
     setSubmitted(false);
   }
 

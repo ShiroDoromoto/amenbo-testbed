@@ -25,6 +25,14 @@ export async function addTransaction(
   return transaction;
 }
 
+/** id の取引を返す。無ければ `undefined` を返す。 */
+export async function getTransaction(
+  db: KakeiboDBConnection,
+  id: string,
+): Promise<Transaction | undefined> {
+  return db.get('transactions', id);
+}
+
 /** 既存の取引を丸ごと置き換える。収支と振替の間で区分を変えてもよい。id の取引が無ければ投げる。 */
 export async function updateTransaction(
   db: KakeiboDBConnection,

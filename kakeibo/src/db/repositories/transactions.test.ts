@@ -6,6 +6,7 @@ import type { IncomeExpenseTransaction, TransferTransaction } from '../../domain
 import {
   addTransaction,
   deleteTransaction,
+  getTransaction,
   listTransactionsByDateRange,
   updateTransaction,
   type NewTransaction,
@@ -80,6 +81,18 @@ describe('addTransaction', () => {
       addTransaction(db, newTransfer({ accountId: 'cash', toAccountId: 'cash' })),
     ).rejects.toThrow('Transfer to the same account: cash');
     expect(await db.count('transactions')).toBe(0);
+  });
+});
+
+describe('getTransaction', () => {
+  it('returns the transaction with the id', async () => {
+    await addTransaction(db, newTransaction());
+    const added = await addTransaction(db, newTransaction({ memo: '探す' }));
+    expect(await getTransaction(db, added.id)).toEqual(added);
+  });
+
+  it('returns undefined when the transaction does not exist', async () => {
+    expect(await getTransaction(db, 'missing')).toBeUndefined();
   });
 });
 
