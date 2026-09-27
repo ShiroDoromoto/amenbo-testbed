@@ -1,23 +1,36 @@
 import type { KakeiboDBConnection } from '../index.ts';
-import type { Transaction } from '../../domain/transaction.ts';
+import type {
+  IncomeExpenseTransaction,
+  Transaction,
+  TransferTransaction,
+} from '../../domain/transaction.ts';
 
-export type NewTransaction = Omit<Transaction, 'id'>;
+export type NewTransaction = Omit<IncomeExpenseTransaction, 'id'> | Omit<TransferTransaction, 'id'>;
+
+/** 振替元と振替先が同じ口座の振替は、保存せずに投げる。 */
+function assertSavable(transaction: NewTransaction): void {
+  if (transaction.type === 'transfer' && transaction.accountId === transaction.toAccountId) {
+    throw new Error(`Transfer to the same account: ${transaction.accountId}`);
+  }
+}
 
 /** 取引を追加し、id を振って返す。 */
 export async function addTransaction(
   db: KakeiboDBConnection,
   input: NewTransaction,
 ): Promise<Transaction> {
+  assertSavable(input);
   const transaction: Transaction = { ...input, id: crypto.randomUUID() };
   await db.add('transactions', transaction);
   return transaction;
 }
 
-/** 既存の取引を丸ごと置き換える。id の取引が無ければ投げる。 */
+/** 既存の取引を丸ごと置き換える。収支と振替の間で区分を変えてもよい。id の取引が無ければ投げる。 */
 export async function updateTransaction(
   db: KakeiboDBConnection,
   transaction: Transaction,
 ): Promise<void> {
+  assertSavable(transaction);
   const tx = db.transaction('transactions', 'readwrite');
   if ((await tx.store.getKey(transaction.id)) === undefined) {
     tx.abort();

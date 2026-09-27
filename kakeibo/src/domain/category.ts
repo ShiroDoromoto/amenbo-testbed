@@ -1,10 +1,10 @@
-import type { TransactionType } from './transaction.ts';
+import type { IncomeExpenseType } from './transaction.ts';
 
 export interface Category {
   id: string;
   name: string;
   /** 収入と支出のどちらのカテゴリか。 */
-  type: TransactionType;
+  type: IncomeExpenseType;
   /** 表示色。`#rrggbb` 形式。 */
   color: string;
   /** 並び順。小さいほど先に並ぶ。 */

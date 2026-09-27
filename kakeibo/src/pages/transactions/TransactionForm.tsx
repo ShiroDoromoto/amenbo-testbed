@@ -1,12 +1,12 @@
 import { useState } from 'preact/hooks';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
-import type { TransactionType } from '../../domain/transaction.ts';
+import type { IncomeExpenseType } from '../../domain/transaction.ts';
 import type { NewTransaction } from '../../db/repositories/transactions.ts';
 import { parseYen } from '../../lib/money.ts';
 import './transactionForm.css';
 
-const typeLabels: Record<TransactionType, string> = {
+const typeLabels: Record<IncomeExpenseType, string> = {
   expense: '支出',
   income: '収入',
 };
@@ -22,7 +22,7 @@ type Props = {
 /** 取引を1件入力するフォーム。保存は `onSubmit` に任せる。 */
 export function TransactionForm({ categories, accounts, initialDate, onSubmit }: Props) {
   const [date, setDate] = useState(initialDate);
-  const [type, setType] = useState<TransactionType>('expense');
+  const [type, setType] = useState<IncomeExpenseType>('expense');
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? '');
@@ -47,7 +47,7 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
     <form class="transaction-form" onSubmit={handleSubmit}>
       <fieldset class="transaction-form-type">
         <legend>収支</legend>
-        {(Object.keys(typeLabels) as TransactionType[]).map((value) => (
+        {(Object.keys(typeLabels) as IncomeExpenseType[]).map((value) => (
           <label key={value}>
             <input
               type="radio"
