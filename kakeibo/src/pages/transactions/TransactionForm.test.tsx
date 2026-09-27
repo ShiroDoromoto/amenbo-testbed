@@ -21,7 +21,11 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-function renderForm(onSubmit = vi.fn(), accountList: Account[] = accounts) {
+function renderForm(
+  onSubmit = vi.fn(),
+  accountList: Account[] = accounts,
+  memoSuggestions?: string[],
+) {
   const root = document.createElement('div');
   document.body.append(root);
   render(
@@ -30,6 +34,7 @@ function renderForm(onSubmit = vi.fn(), accountList: Account[] = accounts) {
         categories={categories}
         accounts={accountList}
         defaults={{ date: '2026-09-28' }}
+        memoSuggestions={memoSuggestions}
         onSubmit={onSubmit}
       />
     </ToastProvider>,
@@ -345,4 +350,19 @@ test('振替を初期値に渡すと、振替の欄にその値を入れて出�
   expect(form.querySelector<HTMLInputElement>('[name="type"]:checked')?.value).toBe('transfer');
   expect(form.querySelector<HTMLSelectElement>('[name="accountId"]')!.value).toBe('bank');
   expect(form.querySelector<HTMLSelectElement>('[name="toAccountId"]')!.value).toBe('cash');
+});
+
+test('過去のメモを、メモの欄の候補に出す', () => {
+  const { form, field } = renderForm(vi.fn(), accounts, ['コンビニ', 'ランチ']);
+  const memo = field<HTMLInputElement>('memo');
+  const list = memo.list!;
+  expect(list).not.toBeNull();
+  expect(form.contains(list)).toBe(true);
+  expect([...list.querySelectorAll('option')].map((o) => o.value)).toEqual(['コンビニ', 'ランチ']);
+});
+
+test('過去のメモが無ければ、候補を出さない', () => {
+  const { form, field } = renderForm();
+  expect(field<HTMLInputElement>('memo').hasAttribute('list')).toBe(false);
+  expect(form.querySelector('datalist')).toBeNull();
 });

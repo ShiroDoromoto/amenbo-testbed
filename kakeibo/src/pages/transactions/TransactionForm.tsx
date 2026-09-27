@@ -47,15 +47,24 @@ type Props = {
   categories: readonly Category[];
   accounts: readonly Account[];
   defaults: TransactionFormDefaults;
+  /** メモの欄に候補として出す、過去のメモ。上から順に出す。 */
+  memoSuggestions?: readonly string[];
   onSubmit: (transaction: NewTransaction) => void | Promise<void>;
 };
 
 /**
  * 取引を1件入力するフォーム。収入・支出と振替を扱う。入力を確かめ、通ったものだけを `onSubmit` に渡す。
  * 保存できたらフォームを `defaults` の状態に戻し、トーストで知らせる。
+ * メモの欄では、`memoSuggestions` を入力の候補に出す。
  * `ToastProvider` の中で使う。
  */
-export function TransactionForm({ categories, accounts, defaults, onSubmit }: Props) {
+export function TransactionForm({
+  categories,
+  accounts,
+  defaults,
+  memoSuggestions = [],
+  onSubmit,
+}: Props) {
   const initialInput: TransactionInput = {
     date: defaults.date,
     amount: defaults.amount === undefined ? '' : String(defaults.amount),
@@ -247,9 +256,19 @@ export function TransactionForm({ categories, accounts, defaults, onSubmit }: Pr
           id={`${id}-memo`}
           type="text"
           name="memo"
+          // 候補は過去のメモから出す。ブラウザが覚えた入力履歴とは混ぜない。
+          autoComplete="off"
+          list={memoSuggestions.length > 0 ? `${id}-memo-suggestions` : undefined}
           value={memo}
           onInput={(e) => setMemo(e.currentTarget.value)}
         />
+        {memoSuggestions.length > 0 && (
+          <datalist id={`${id}-memo-suggestions`}>
+            {memoSuggestions.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        )}
       </div>
 
       <button class="transaction-form-submit" type="submit" disabled={saving}>

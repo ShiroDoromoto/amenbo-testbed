@@ -6,7 +6,7 @@ import { deleteDB } from 'idb';
 import { ToastProvider } from '../../components/Toast/index.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { addAccount } from '../../db/repositories/accounts.ts';
-import { listTransactionsByDateRange } from '../../db/repositories/transactions.ts';
+import { addTransaction, listTransactionsByDateRange } from '../../db/repositories/transactions.ts';
 import { NewTransactionPage } from './NewTransactionPage.tsx';
 
 const testDbName = 'kakeibo-new-transaction-page-test';
@@ -75,4 +75,51 @@ test('入力した取引を DB に足す', async () => {
       memo: '',
     },
   ]);
+});
+
+test('過去のメモを候補に出し、保存したメモを候補の先頭に足す', async () => {
+  const setup = await openKakeiboDB(testDbName);
+  const account = await addAccount(setup, { name: '現金', type: 'cash', initialBalance: 0 });
+  await addTransaction(setup, {
+    date: '2026-09-01',
+    amount: 500,
+    type: 'expense',
+    categoryId: 'c',
+    accountId: account.id,
+    memo: 'ランチ',
+  });
+  setup.close();
+
+  render(
+    <ToastProvider>
+      <NewTransactionPage dbName={testDbName} />
+    </ToastProvider>,
+    document.body,
+  );
+  const form = await waitFor(() => document.querySelector('form'));
+  const field = <T extends HTMLElement>(name: string) => form.querySelector<T>(`[name="${name}"]`)!;
+  const suggestions = () =>
+    [...(field<HTMLInputElement>('memo').list?.querySelectorAll('option') ?? [])].map(
+      (o) => o.value,
+    );
+  expect(suggestions()).toEqual(['ランチ']);
+
+  const category = field<HTMLSelectElement>('categoryId').options[1]!;
+  await act(() => {
+    const amount = field<HTMLInputElement>('amount');
+    amount.value = '300';
+    amount.dispatchEvent(new Event('input', { bubbles: true }));
+    const select = field<HTMLSelectElement>('categoryId');
+    select.value = category.value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    const memo = field<HTMLInputElement>('memo');
+    memo.value = 'コンビニ';
+    memo.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+
+  await waitFor(() => suggestions().length === 2);
+  expect(suggestions()).toEqual(['コンビニ', 'ランチ']);
 });
