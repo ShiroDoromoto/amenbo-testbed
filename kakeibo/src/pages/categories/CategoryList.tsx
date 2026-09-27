@@ -1,6 +1,7 @@
+import type { JSX } from 'preact';
 import { useEffect, useId, useRef, useState } from 'preact/hooks';
 import { useToast } from '../../components/Toast/index.ts';
-import type { Category } from '../../domain/category.ts';
+import { compareCategories, type Category } from '../../domain/category.ts';
 import type { IncomeExpenseType } from '../../domain/transaction.ts';
 import { openKakeiboDB, type KakeiboDBConnection } from '../../db/index.ts';
 import {
@@ -8,6 +9,7 @@ import {
   deleteCategory,
   deleteCategoryAndReassign,
   listCategories,
+  reorderCategories,
   updateCategory,
 } from '../../db/repositories/categories.ts';
 import { listRecurringTransactions } from '../../db/repositories/recurring.ts';
@@ -43,6 +45,25 @@ function nextOrder(categories: readonly Category[], type: IncomeExpenseType): nu
   return orders.length === 0 ? 0 : Math.max(...orders) + 1;
 }
 
+/** `ids` の中の `id` を、`to` 番目へ動かした並び。 */
+function moveTo(ids: readonly string[], id: string, to: number): string[] {
+  const rest = ids.filter((x) => x !== id);
+  rest.splice(to, 0, id);
+  return rest;
+}
+
+/** 収支区分 `type` のカテゴリの id を、並び順で返す。 */
+function idsOf(categories: readonly Category[], type: IncomeExpenseType): string[] {
+  return categories.filter((c) => c.type === type).map((c) => c.id);
+}
+
+/** ドラッグしている最中の状態。`ids` は、収支区分 `type` のカテゴリの id を、いま見せている順に並べたもの。 */
+type Drag = {
+  type: IncomeExpenseType;
+  id: string;
+  ids: string[];
+};
+
 /** 付け替え先の候補。`category` と同じ収支区分の、ほかのカテゴリ。 */
 function reassignCandidates(categories: readonly Category[], category: Category): Category[] {
   return categories.filter((c) => c.type === category.type && c.id !== category.id);
@@ -51,11 +72,20 @@ function reassignCandidates(categories: readonly Category[], category: Category)
 /**
  * カテゴリの管理画面。カテゴリを収支区分ごとに並び順で出し、追加・名前の変更・削除ができる。
  * 使われているカテゴリを消すときは、取引と定期取引の付け替え先を選ばせる。
+ * 行のつまみをドラッグするか、つまみにフォーカスして上下の矢印キーを押すと、同じ収支区分の中で並べ替える。
  * `ToastProvider` の中で使う。
  */
 export function CategoryList({ dbName }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [deleting, setDeleting] = useState<CategoryUsage | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  // ポインターのイベントは描き直しを待たずに続けて来るので、最新の状態を ref からも読む。
+  const dragRef = useRef<Drag | null>(null);
+  /** ドラッグを保存せずにやめる。ドラッグしていなければ `null`。 */
+  const stopDragRef = useRef<(() => void) | null>(null);
+
+  // ドラッグの途中で画面を離れたら、window に付けたイベントを外す。
+  useEffect(() => () => stopDragRef.current?.(), []);
   const toast = useToast();
   const id = useId();
 
@@ -111,6 +141,87 @@ export function CategoryList({ dbName }: Props) {
     return true;
   }
 
+  /** 収支区分 `type` のカテゴリを `ids` の順に並べ替えて保存する。 */
+  async function reorder(type: IncomeExpenseType, ids: readonly string[]) {
+    if (!loaded) return;
+    const current = idsOf(loaded.categories, type);
+    if (ids.every((id, i) => current[i] === id)) return;
+    // 保存を待たずに、並べ替えた順で出す。
+    const orders = new Map(ids.map((id, order) => [id, order]));
+    setLoaded({
+      db: loaded.db,
+      categories: loaded.categories
+        .map((c) => {
+          const order = orders.get(c.id);
+          return order === undefined ? c : { ...c, order };
+        })
+        .sort(compareCategories),
+    });
+    try {
+      await reorderCategories(loaded.db, ids);
+    } catch {
+      toast.show('並べ替えられませんでした', { kind: 'error' });
+      await reload(loaded.db);
+    }
+  }
+
+  function updateDrag(next: Drag | null) {
+    dragRef.current = next;
+    setDrag(next);
+  }
+
+  const dragHandlers = (category: Category): DragHandlers => ({
+    onPointerDown(event) {
+      const list = event.currentTarget.closest('ul');
+      if (!loaded || !list || event.button !== 0 || dragRef.current) return;
+      event.preventDefault();
+      const pointerId = event.pointerId;
+      updateDrag({
+        type: category.type,
+        id: category.id,
+        ids: idsOf(loaded.categories, category.type),
+      });
+
+      function move(e: PointerEvent) {
+        const current = dragRef.current;
+        if (!current || e.pointerId !== pointerId) return;
+        // ほかの行のうち、真ん中がポインターより上にある行の数が、動かす先の位置になる。
+        const to = [...list!.querySelectorAll<HTMLElement>(':scope > li')].filter((row) => {
+          if (row.dataset.id === current.id) return false;
+          const rect = row.getBoundingClientRect();
+          return rect.top + rect.height / 2 < e.clientY;
+        }).length;
+        const ids = moveTo(current.ids, current.id, to);
+        if (ids.some((id, i) => current.ids[i] !== id)) updateDrag({ ...current, ids });
+      }
+      const stop = (save: boolean) => (e?: PointerEvent) => {
+        if (e && e.pointerId !== pointerId) return;
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', drop);
+        window.removeEventListener('pointercancel', cancel);
+        stopDragRef.current = null;
+        const current = dragRef.current;
+        updateDrag(null);
+        if (save && current) void reorder(current.type, current.ids);
+      };
+      const drop = stop(true);
+      const cancel = stop(false);
+      // 行を動かすと、つまみのポインターキャプチャが外れる。ドラッグの間は window でイベントを受ける。
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', drop);
+      window.addEventListener('pointercancel', cancel);
+      stopDragRef.current = cancel;
+    },
+    onKeyDown(event) {
+      if (!loaded || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
+      event.preventDefault();
+      const ids = idsOf(loaded.categories, category.type);
+      const to = ids.indexOf(category.id) + (event.key === 'ArrowUp' ? -1 : 1);
+      if (to < 0 || to >= ids.length) return;
+      void reorder(category.type, moveTo(ids, category.id, to));
+    },
+  });
+
   /** 使っている件数を数えて、削除の確認を出す。 */
   async function startDeleting(category: Category) {
     if (!loaded) return;
@@ -158,8 +269,16 @@ export function CategoryList({ dbName }: Props) {
       {loaded ? (
         <>
           <AddCategoryForm categories={loaded.categories} onAdd={add} />
+          <p class="category-reorder-hint">
+            ⠿ をドラッグすると、同じ区分の中で並べ替えられます。キーボードでは ⠿
+            にフォーカスして、上下の矢印キーで動かします。
+          </p>
           {typeOrder.map((type) => {
-            const categories = loaded.categories.filter((c) => c.type === type);
+            const byId = new Map(
+              loaded.categories.filter((c) => c.type === type).map((c) => [c.id, c]),
+            );
+            const categories =
+              drag?.type === type ? drag.ids.map((id) => byId.get(id)!) : [...byId.values()];
             return (
               <section key={type} class="category-list-section" aria-labelledby={`${id}-${type}`}>
                 <h3 id={`${id}-${type}`}>{typeLabels[type]}</h3>
@@ -172,6 +291,8 @@ export function CategoryList({ dbName }: Props) {
                         key={category.id}
                         category={category}
                         categories={loaded.categories}
+                        dragging={drag?.id === category.id}
+                        dragHandlers={dragHandlers(category)}
                         onRename={rename}
                         onDelete={startDeleting}
                       />
@@ -274,18 +395,31 @@ function AddCategoryForm({ categories, onAdd }: AddFormProps) {
   );
 }
 
+/** 行のつまみに付けるイベント。 */
+type DragHandlers = Pick<JSX.HTMLAttributes<HTMLButtonElement>, 'onPointerDown' | 'onKeyDown'>;
+
 type RowProps = {
   category: Category;
   categories: readonly Category[];
+  /** この行をドラッグしている最中か。 */
+  dragging: boolean;
+  dragHandlers: DragHandlers;
   onRename: (category: Category, name: string) => Promise<boolean>;
   onDelete: (category: Category) => void;
 };
 
 /**
  * カテゴリ1件の行。「名前を変える」を押すと、その場で名前の入力欄に変わる。
- * 「削除する」を押すと、削除の確認を出す。
+ * 「削除する」を押すと、削除の確認を出す。先頭のつまみで並べ替える。
  */
-function CategoryRow({ category, categories, onRename, onDelete }: RowProps) {
+function CategoryRow({
+  category,
+  categories,
+  dragging,
+  dragHandlers,
+  onRename,
+  onDelete,
+}: RowProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(category.name);
   const [error, setError] = useState<string | null>(null);
@@ -330,7 +464,18 @@ function CategoryRow({ category, categories, onRename, onDelete }: RowProps) {
 
   if (!editing) {
     return (
-      <li class="category-list-item">
+      <li
+        class={dragging ? 'category-list-item category-list-item-dragging' : 'category-list-item'}
+        data-id={category.id}
+      >
+        <button
+          type="button"
+          class="category-drag-handle"
+          aria-label={`${category.name}の並び順を変える`}
+          {...dragHandlers}
+        >
+          <span aria-hidden="true">⠿</span>
+        </button>
         {swatch}
         <span class="category-list-name">{category.name}</span>
         <button
@@ -354,7 +499,7 @@ function CategoryRow({ category, categories, onRename, onDelete }: RowProps) {
   }
 
   return (
-    <li class="category-list-item">
+    <li class="category-list-item" data-id={category.id}>
       {swatch}
       <form class="category-rename-form" noValidate onSubmit={handleSubmit}>
         <div class="category-name-control">

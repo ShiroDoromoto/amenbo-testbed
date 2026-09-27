@@ -96,3 +96,60 @@ test('スマホ幅でも、カテゴリの行と削除の確認が横にはみ�
   );
   expect(overflow).toBe(0);
 });
+
+test('つまみをドラッグして並べ替え、再読み込みしても同じ並びで出す', async ({ page }) => {
+  await page.goto('/#/categories');
+  const income = page.getByRole('main').getByRole('region', { name: '収入' });
+  const names = income.locator('.category-list-name');
+  await expect(names).toHaveText(['給与', '賞与', '臨時収入', 'その他']);
+
+  // 画面の外ではマウスを動かせないので、先に行を画面に入れる。
+  await income.getByRole('listitem').last().scrollIntoViewIfNeeded();
+  const handle = income.getByRole('button', { name: '給与の並び順を変える' });
+  const from = (await handle.boundingBox())!;
+  const to = (await income.getByRole('listitem').nth(2).boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2, to.y + to.height * 0.75, { steps: 10 });
+  await page.mouse.up();
+  await expect(names).toHaveText(['賞与', '臨時収入', '給与', 'その他']);
+
+  // 画面は保存を待たずに並びを変えるので、DB に書き終わるのを待ってから読み込み直す。
+  const storedIncomeNames = () =>
+    page.evaluate(
+      () =>
+        new Promise<string[]>((resolve, reject) => {
+          const request = indexedDB.open('kakeibo');
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const db = request.result;
+            const all = db.transaction('categories').objectStore('categories').getAll();
+            all.onsuccess = () => {
+              db.close();
+              const categories = all.result as { name: string; type: string; order: number }[];
+              resolve(
+                categories
+                  .filter((c) => c.type === 'income')
+                  .sort((a, b) => a.order - b.order)
+                  .map((c) => c.name),
+              );
+            };
+          };
+        }),
+    );
+  await expect.poll(storedIncomeNames).toEqual(['賞与', '臨時収入', '給与', 'その他']);
+
+  await page.reload();
+  await expect(names).toHaveText(['賞与', '臨時収入', '給与', 'その他']);
+});
+
+test('スマホ幅でも、つまみの付いたカテゴリの行が横にはみ出さない', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto('/#/categories');
+  await expect(page.getByRole('button', { name: '水道光熱費の並び順を変える' })).toBeVisible();
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(0);
+});

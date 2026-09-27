@@ -8,6 +8,7 @@ import {
   deleteCategoryAndReassign,
   getCategory,
   listCategories,
+  reorderCategories,
   updateCategory,
   type NewCategory,
 } from './categories.ts';
@@ -62,6 +63,38 @@ describe('updateCategory', () => {
       'Category not found: missing',
     );
     expect(await db.count('categories')).toBe(0);
+  });
+});
+
+describe('reorderCategories', () => {
+  it('numbers the categories from 0 in the given order', async () => {
+    const a = await addCategory(db, newCategory({ name: 'A', order: 0 }));
+    const b = await addCategory(db, newCategory({ name: 'B', order: 1 }));
+    const c = await addCategory(db, newCategory({ name: 'C', order: 2 }));
+    await reorderCategories(db, [c.id, a.id, b.id]);
+    expect((await listCategories(db)).map((x) => [x.name, x.order])).toEqual([
+      ['C', 0],
+      ['A', 1],
+      ['B', 2],
+    ]);
+  });
+
+  it('leaves the categories not given untouched', async () => {
+    const a = await addCategory(db, newCategory({ name: 'A', order: 0 }));
+    const b = await addCategory(db, newCategory({ name: 'B', order: 1 }));
+    const salary = await addCategory(db, newCategory({ name: '給与', type: 'income', order: 7 }));
+    await reorderCategories(db, [b.id, a.id]);
+    expect(await db.get('categories', salary.id)).toEqual(salary);
+  });
+
+  it('changes nothing and throws when a category does not exist', async () => {
+    const a = await addCategory(db, newCategory({ name: 'A', order: 0 }));
+    const b = await addCategory(db, newCategory({ name: 'B', order: 1 }));
+    await expect(reorderCategories(db, [b.id, 'missing', a.id])).rejects.toThrow(
+      'Category not found: missing',
+    );
+    expect(await db.get('categories', a.id)).toEqual(a);
+    expect(await db.get('categories', b.id)).toEqual(b);
   });
 });
 

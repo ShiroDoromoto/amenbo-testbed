@@ -268,3 +268,92 @@ test('使われているのに付け替え先が無ければ、確認を出さ�
   expect(dialog()).toBeNull();
   expect(namesIn('収入')).toEqual([income[0]!.name]);
 });
+
+/** 収支区分 `type` のカテゴリの名前を、DB の並び順で返す。 */
+async function storedNames(type: 'expense' | 'income'): Promise<string[]> {
+  const db = await openKakeiboDB(testDbName);
+  const names = (await listCategories(db, type)).map((c) => c.name);
+  db.close();
+  return names;
+}
+
+/** DB の並びが `expected` になるまで待つ。 */
+async function waitForStored(type: 'expense' | 'income', expected: string[]) {
+  for (let i = 0; i < 100; i++) {
+    if ((await storedNames(type)).join() === expected.join()) return;
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+  }
+  expect(await storedNames(type)).toEqual(expected);
+}
+
+async function pointer(target: Element, type: string, clientY: number) {
+  await act(() => {
+    target.dispatchEvent(
+      new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientY }),
+    );
+  });
+}
+
+test('つまみをドラッグすると、落とした位置へ並べ替えて保存する', async () => {
+  renderPage();
+  await waitFor(() => document.querySelector('.category-list'));
+  const before = namesIn('収入');
+
+  // jsdom は配置を計算しないので、行を上から 40px ずつ並べたことにする。
+  const rows = [...document.querySelectorAll<HTMLElement>('section:last-of-type li')];
+  rows.forEach((row, i) => {
+    row.getBoundingClientRect = () => ({ top: i * 40, height: 40 }) as DOMRect;
+  });
+
+  const handle = button(`${before[0]}の並び順を変える`)!;
+  await pointer(handle, 'pointerdown', 20);
+  await pointer(handle, 'pointermove', 110);
+  expect(namesIn('収入')).toEqual([before[1]!, before[2]!, before[0]!, ...before.slice(3)]);
+  expect(handle.closest('li')!.classList).toContain('category-list-item-dragging');
+
+  await pointer(handle, 'pointerup', 110);
+  expect(handle.closest('li')!.classList).not.toContain('category-list-item-dragging');
+  const expected = [before[1]!, before[2]!, before[0]!, ...before.slice(3)];
+  await waitForStored('income', expected);
+  expect(namesIn('収入')).toEqual(expected);
+});
+
+test('ドラッグを取り消されたら、元の並びに戻す', async () => {
+  renderPage();
+  await waitFor(() => document.querySelector('.category-list'));
+  const before = namesIn('収入');
+  const rows = [...document.querySelectorAll<HTMLElement>('section:last-of-type li')];
+  rows.forEach((row, i) => {
+    row.getBoundingClientRect = () => ({ top: i * 40, height: 40 }) as DOMRect;
+  });
+
+  const handle = button(`${before[0]}の並び順を変える`)!;
+  await pointer(handle, 'pointerdown', 20);
+  await pointer(handle, 'pointermove', 110);
+  await pointer(handle, 'pointercancel', 100);
+  expect(namesIn('収入')).toEqual(before);
+  expect(await storedNames('income')).toEqual(before);
+});
+
+test('つまみで上下の矢印キーを押すと、1つずつ動かして保存する', async () => {
+  renderPage();
+  await waitFor(() => document.querySelector('.category-list'));
+  const before = namesIn('支出');
+  const handle = button(`${before[0]}の並び順を変える`)!;
+  const press = (key: string) =>
+    act(() => {
+      handle.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    });
+
+  // 先頭より上へは動かさない。
+  await press('ArrowUp');
+  expect(namesIn('支出')).toEqual(before);
+
+  await press('ArrowDown');
+  const expected = [before[1]!, before[0]!, ...before.slice(2)];
+  expect(namesIn('支出')).toEqual(expected);
+  await waitForStored('expense', expected);
+  expect(namesIn('収入')).toEqual(
+    defaultCategories.filter((c) => c.type === 'income').map((c) => c.name),
+  );
+});
