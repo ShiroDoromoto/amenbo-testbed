@@ -1,7 +1,9 @@
 import preact from '@preact/preset-vite';
 import { configDefaults, defineConfig } from 'vitest/config';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // GitHub Pages では https://<owner>.github.io/amenbo-testbed/ で配信する。開発サーバーは / のまま。
+  base: command === 'build' ? '/amenbo-testbed/' : '/',
   plugins: [preact()],
   test: {
     environment: 'jsdom',
@@ -10,4 +12,4 @@ export default defineConfig({
     // 既定では CSS の中身が空になる。?raw で読む CSS だけ中身を残す（tokens.test.ts が使う）。
     css: { include: /\.css\?raw$/ },
   },
-});
+}));

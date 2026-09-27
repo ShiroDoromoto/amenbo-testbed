@@ -23,6 +23,10 @@ E2E テストは `e2e/` に置く。初めて回す前に `npx playwright instal
 
 CI（`.github/workflows/kakeibo-ci.yml`）は、lint・整形の確認・型チェック・ユニットテスト・E2E テスト・ビルドを回す。
 
+`master` に push すると、`.github/workflows/kakeibo-deploy.yml` が lint・型チェック・ユニットテストを回してビルドし、GitHub Pages（`https://shirodoromoto.github.io/amenbo-testbed/`）へデプロイする。
+ビルドでは `vite.config.ts` の `base` を `/amenbo-testbed/` にする。開発サーバーは `/` のまま。
+初めて使う前に、リポジトリの Settings → Pages で配信元（Source）を GitHub Actions にする（管理者権限が要る）。
+
 書式は Prettier に任せ、ESLint は書式を見ない（`eslint-config-prettier` で書式のルールを切っている）。
 
 ## 見た目の値
