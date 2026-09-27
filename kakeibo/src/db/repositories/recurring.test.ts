@@ -9,6 +9,7 @@ import type {
 import {
   addRecurringTransaction,
   deleteRecurringTransaction,
+  generateDueTransactions,
   getRecurringTransaction,
   listRecurringTransactions,
   updateRecurringTransaction,
@@ -176,5 +177,51 @@ describe('listRecurringTransactions', () => {
 
   it('returns nothing when there are none', async () => {
     expect(await listRecurringTransactions(db)).toEqual([]);
+  });
+});
+
+describe('generateDueTransactions', () => {
+  it('adds the due transactions and remembers the last one', async () => {
+    const rent = await addRecurringTransaction(db, {
+      ...newRecurring({ dayOfMonth: 27, memo: '家賃' }),
+      lastGeneratedOn: '2025-01-27',
+    });
+    const created = await generateDueTransactions(db, '2025-03-27');
+    expect(created.map((t) => t.date)).toEqual(['2025-02-27', '2025-03-27']);
+    expect(created[0]).toMatchObject({
+      type: 'expense',
+      amount: 80000,
+      categoryId: 'rent',
+      accountId: 'bank',
+      memo: '家賃',
+    });
+    expect(await db.count('transactions')).toBe(2);
+    expect(await getRecurringTransaction(db, rent.id)).toEqual({
+      ...rent,
+      lastGeneratedOn: '2025-03-27',
+    });
+  });
+
+  it('does not create the same transactions again', async () => {
+    await addRecurringTransaction(db, newTransfer({ dayOfMonth: 1 }));
+    expect(await generateDueTransactions(db, '2025-03-05')).toHaveLength(1);
+    expect(await generateDueTransactions(db, '2025-03-31')).toEqual([]);
+    expect(await db.count('transactions')).toBe(1);
+  });
+
+  it('returns transactions from every recurring transaction, oldest first', async () => {
+    await addRecurringTransaction(db, newRecurring({ dayOfMonth: 20 }));
+    await addRecurringTransaction(db, newTransfer({ dayOfMonth: 5 }));
+    const created = await generateDueTransactions(db, '2025-03-25');
+    expect(created.map((t) => [t.date, t.type])).toEqual([
+      ['2025-03-05', 'transfer'],
+      ['2025-03-20', 'expense'],
+    ]);
+  });
+
+  it('leaves a recurring transaction that is not yet due untouched', async () => {
+    const added = await addRecurringTransaction(db, newRecurring({ dayOfMonth: 28 }));
+    expect(await generateDueTransactions(db, '2025-03-27')).toEqual([]);
+    expect(await getRecurringTransaction(db, added.id)).toEqual(added);
   });
 });
