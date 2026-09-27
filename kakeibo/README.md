@@ -103,3 +103,11 @@ DB を開くと、保存されているバージョンより新しい移行だ�
 取引の入力画面は、前回保存したときに選んだカテゴリと口座を初期値にする。カテゴリは収支区分ごとに覚える。
 覚えた値はブラウザの localStorage（キー `kakeibo:lastSelection`）に置くので、端末ごとに別になる。
 覚えたカテゴリや口座が消されていたら、初期値にしない。
+
+## 取引の一覧
+
+一覧で選んだ月と絞り込みの条件は、URL のハッシュのクエリに持たせる（例：`#/transactions?month=2026-08&type=expense&memo=ランチ`）。
+再読み込みしても、URL を開き直しても、同じ条件で出る。
+キーは `month`（`YYYY-MM`）・`account`・`type`（`income` か `expense`）・`category`・`memo`・`min`・`max`。
+絞り込まない項目と今月は書かない。読めない `month` と `type` は、今月・すべての区分として扱う。
+クエリの読み書きは `src/router/hash.ts` の `queryFromHash` と `replaceHashQuery` で行う。`replaceHashQuery` は履歴を積まない。

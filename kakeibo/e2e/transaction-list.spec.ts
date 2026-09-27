@@ -175,6 +175,27 @@ test('収支区分を選ぶと、その区分の取引だけが出る', async ({
   await expect(main.getByRole('listitem')).toHaveCount(2);
 });
 
+test('月と絞り込みの条件は URL に残り、再読み込みしても保つ', async ({ page }) => {
+  await seedTransactions(page);
+  await page.goto('/#/transactions');
+  const main = page.getByRole('main');
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+
+  await main.getByLabel('メモ').fill('ランチ');
+  await main.getByLabel('金額の上限').fill('1000');
+  await expect(main.getByRole('listitem')).toHaveCount(1);
+  await main.getByRole('button', { name: '前月' }).click();
+  await expect(page).toHaveURL(/#\/transactions\?month=2026-08&/);
+
+  await page.reload();
+  await expect(main.getByRole('navigation', { name: '表示する月' })).toContainText('2026年8月');
+  await expect(main.getByLabel('メモ')).toHaveValue('ランチ');
+  await expect(main.getByLabel('金額の上限')).toHaveValue('1000');
+  await main.getByRole('button', { name: '翌月' }).click();
+  await expect(main.getByRole('listitem')).toHaveCount(1);
+  await expect(main.getByRole('listitem')).toContainText('ランチ');
+});
+
 test('一覧の取引を押すと、その取引の編集画面が開く', async ({ page }) => {
   await seedTransactions(page);
   await page.goto('/#/transactions');

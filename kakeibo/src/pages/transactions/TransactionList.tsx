@@ -1,25 +1,14 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
-import {
-  isIncomeExpenseType,
-  isTransfer,
-  type IncomeExpenseType,
-  type Transaction,
-} from '../../domain/transaction.ts';
+import { isIncomeExpenseType, isTransfer, type Transaction } from '../../domain/transaction.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { listAccounts } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
 import { listTransactionsByDateRange } from '../../db/repositories/transactions.ts';
-import {
-  addMonths,
-  endOfMonth,
-  startOfMonth,
-  toDateString,
-  type DateString,
-} from '../../lib/date.ts';
+import { addMonths, endOfMonth, toDateString, type DateString } from '../../lib/date.ts';
 import { formatYen, parseYen, type Yen } from '../../lib/money.ts';
-import { hashFromPath } from '../../router/index.ts';
+import { hashFromPath, queryFromHash, replaceHashQuery } from '../../router/index.ts';
 import { filterTransactionsByAccount } from './filterTransactionsByAccount.ts';
 import { filterTransactionsByAmount } from './filterTransactionsByAmount.ts';
 import { filterTransactionsByMemo } from './filterTransactionsByMemo.ts';
@@ -30,6 +19,11 @@ import {
   sortTransactions,
   type TransactionSortOrder,
 } from './sortTransactions.ts';
+import {
+  readTransactionListQuery,
+  writeTransactionListQuery,
+  type TransactionListQuery,
+} from './transactionListQuery.ts';
 import './transactionList.css';
 
 type Loaded = {
@@ -96,7 +90,7 @@ const sortOrderLabels = [
 ] as const;
 
 /** 絞り込む収支区分。空文字はすべての区分。 */
-type TypeFilter = IncomeExpenseType | '';
+type TypeFilter = TransactionListQuery['type'];
 
 /**
  * 収支区分とカテゴリで絞り込む。どちらも空文字なら絞り込まない。
@@ -147,22 +141,27 @@ function subtotalClass(subtotal: Yen): string {
  * 取引が `pageSize` 件を超えたら、ページに分けて出し、前へ・次へのボタンでページを送る。
  * 月・絞り込み・検索・並び順を変えたら、最初のページに戻す。
  * 日ごとの小計は、日がページをまたいでも、その日の取引すべてで出す。
+ * 月と絞り込みの条件は URL のクエリに持たせ、再読み込みしても残す。
  */
-export function TransactionList({ dbName, today, pageSize = defaultPageSize }: Props) {
-  const [month, setMonth] = useState(() => startOfMonth(today ?? toDateString(new Date())));
+export function TransactionList({ dbName, today: todayProp, pageSize = defaultPageSize }: Props) {
+  const [today] = useState(() => todayProp ?? toDateString(new Date()));
+  const [initial] = useState(() =>
+    readTransactionListQuery(queryFromHash(window.location.hash), today),
+  );
+  const [month, setMonth] = useState(initial.month);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   /** 絞り込む口座の id。空文字はすべての口座。 */
-  const [accountId, setAccountId] = useState('');
+  const [accountId, setAccountId] = useState(initial.accountId);
   /** 絞り込むカテゴリの id。空文字はすべてのカテゴリ。 */
-  const [categoryId, setCategoryId] = useState('');
+  const [categoryId, setCategoryId] = useState(initial.categoryId);
   /** 絞り込む収支区分。空文字はすべての区分。 */
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>(initial.type);
   /** メモを検索するキーワード。空文字は検索しない。 */
-  const [keyword, setKeyword] = useState('');
+  const [keyword, setKeyword] = useState(initial.keyword);
   const [sortOrder, setSortOrder] = useState<TransactionSortOrder>('date-desc');
   /** 金額の下限と上限の入力。空文字はその端を絞り込まない。 */
-  const [minAmountInput, setMinAmountInput] = useState('');
-  const [maxAmountInput, setMaxAmountInput] = useState('');
+  const [minAmountInput, setMinAmountInput] = useState(initial.minAmount);
+  const [maxAmountInput, setMaxAmountInput] = useState(initial.maxAmount);
   const minAmount = parseAmountBound(minAmountInput);
   const maxAmount = parseAmountBound(maxAmountInput);
   // 出す取引の組が変わったら、最初のページに戻す。組を表す値を覚えておき、変わったかを比べる。
@@ -187,6 +186,19 @@ export function TransactionList({ dbName, today, pageSize = defaultPageSize }: P
     // 下のボタンで送ったときに、新しいページの頭から読めるようにする。
     listRef.current?.scrollIntoView?.({ block: 'start' });
   }
+
+  useEffect(() => {
+    const query: TransactionListQuery = {
+      month,
+      accountId,
+      type: typeFilter,
+      categoryId,
+      keyword,
+      minAmount: minAmountInput,
+      maxAmount: maxAmountInput,
+    };
+    replaceHashQuery(writeTransactionListQuery(query, today));
+  }, [today, month, accountId, typeFilter, categoryId, keyword, minAmountInput, maxAmountInput]);
 
   useEffect(() => {
     const opening = openKakeiboDB(dbName);
