@@ -31,7 +31,12 @@ describe('openKakeiboDB', () => {
   it('creates the stores', async () => {
     db = await openKakeiboDB(testDbName);
     expect(db.version).toBe(dbVersion);
-    expect([...db.objectStoreNames].sort()).toEqual(['accounts', 'categories', 'transactions']);
+    expect([...db.objectStoreNames].sort()).toEqual([
+      'accounts',
+      'categories',
+      'recurringTransactions',
+      'transactions',
+    ]);
   });
 
   it('keys records by id', async () => {
