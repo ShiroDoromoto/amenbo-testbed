@@ -14,13 +14,23 @@ import {
 import '../transactions/transactionForm.css';
 
 /** 画面に並ぶ順。保存できなかったとき、この順で最初にエラーのある欄に移る。 */
-const fieldOrder: readonly AccountInputField[] = ['name', 'type', 'initialBalance'];
+const fieldOrder: readonly AccountInputField[] = [
+  'name',
+  'type',
+  'initialBalance',
+  'closingDay',
+  'paymentDay',
+];
+
+const days = Array.from({ length: 31 }, (_, i) => String(i + 1));
 
 /** 欄の初期値。口座を編集するときは、その口座の値を渡す。省略すると、空の現金の口座。 */
 export type AccountFormDefaults = {
   name?: string;
   type?: AccountType;
   initialBalance?: number;
+  closingDay?: number | null;
+  paymentDay?: number | null;
 };
 
 type Props = {
@@ -38,6 +48,8 @@ export function AccountForm({ defaults = {}, onSubmit }: Props) {
     name: defaults.name ?? '',
     type: defaults.type ?? 'cash',
     initialBalance: defaults.initialBalance === undefined ? '0' : String(defaults.initialBalance),
+    closingDay: defaults.closingDay == null ? '' : String(defaults.closingDay),
+    paymentDay: defaults.paymentDay == null ? '' : String(defaults.paymentDay),
   }));
   const [saving, setSaving] = useState(false);
   // 保存を押すまではエラーを出さない。押したあとは入力を変えるたびに確かめ直し、直した欄のエラーを消す。
@@ -79,7 +91,6 @@ export function AccountForm({ defaults = {}, onSubmit }: Props) {
     return {
       id: `${id}-${field}`,
       name: field,
-      required: true,
       'aria-invalid': invalid || undefined,
       'aria-describedby': invalid ? `${id}-${field}-error` : undefined,
     };
@@ -106,6 +117,26 @@ export function AccountForm({ defaults = {}, onSubmit }: Props) {
     );
   }
 
+  /** 締め日・引き落とし日の欄。決めていないことも選べる。 */
+  function billingDayField(name: 'closingDay' | 'paymentDay', label: string) {
+    return field(
+      name,
+      label,
+      <select
+        {...controlProps(name)}
+        value={input[name]}
+        onChange={(e) => update(name, e.currentTarget.value)}
+      >
+        <option value="">決めていない</option>
+        {days.map((day) => (
+          <option key={day} value={day}>
+            {day}日
+          </option>
+        ))}
+      </select>,
+    );
+  }
+
   return (
     // 必須や形式の確かめはブラウザに任せず、自前のメッセージで出す。
     <form class="transaction-form" ref={formRef} noValidate onSubmit={handleSubmit}>
@@ -114,6 +145,7 @@ export function AccountForm({ defaults = {}, onSubmit }: Props) {
         '名前',
         <input
           {...controlProps('name')}
+          required
           type="text"
           autoComplete="off"
           value={input.name}
@@ -144,11 +176,19 @@ export function AccountForm({ defaults = {}, onSubmit }: Props) {
         // 負の値も入れられるよう、`inputMode="numeric"` は付けない。スマホで数字だけのキーボードになり、`-` を打てない。
         <input
           {...controlProps('initialBalance')}
+          required
           type="text"
           autoComplete="off"
           value={input.initialBalance}
           onInput={(e) => update('initialBalance', e.currentTarget.value)}
         />,
+      )}
+
+      {input.type === 'card' && (
+        <>
+          {billingDayField('closingDay', '締め日（その日が無い月は月末）')}
+          {billingDayField('paymentDay', '引き落とし日（その日が無い月は月末）')}
+        </>
       )}
 
       <button class="transaction-form-submit" type="submit" disabled={saving}>
