@@ -1,0 +1,17 @@
+.edit-transaction-delete {
+  display: block;
+  margin-top: var(--space-6);
+  padding: var(--space-2) var(--space-5);
+  font: inherit;
+  color: var(--color-danger);
+  background: var(--color-bg);
+  border: 1px solid var(--color-danger);
+  cursor: pointer;
+}
+
+/* スマホ幅では、保存ボタンと同じく横いっぱいにする */
+@media (max-width: 640px) {
+  .edit-transaction-delete {
+    width: 100%;
+  }
+}
