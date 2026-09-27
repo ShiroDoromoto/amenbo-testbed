@@ -89,6 +89,46 @@ test('前月・翌月のボタンで、表示する月を切り替える', async
   await expect(main.getByRole('listitem')).toHaveCount(2);
 });
 
+test('口座を選ぶと、その口座の取引だけに絞り込む', async ({ page }) => {
+  await seedTransactions(page);
+  await page.goto('/#/transactions');
+  const main = page.getByRole('main');
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+
+  await main.getByLabel('口座').selectOption({ label: '現金' });
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('kakeibo');
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction('accounts', 'readwrite');
+          tx.objectStore('accounts').put({
+            id: 'e2e-bank',
+            name: '銀行',
+            type: 'bank',
+            initialBalance: 0,
+          });
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+  await page.reload();
+  await main.getByLabel('口座').selectOption({ label: '銀行' });
+  await expect(main.getByText('2026年9月の銀行の取引はありません')).toBeVisible();
+  await expect(main.getByRole('listitem')).toHaveCount(0);
+
+  await main.getByLabel('口座').selectOption({ label: 'すべての口座' });
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+});
+
 test('カテゴリを選ぶと、そのカテゴリの取引だけが出る', async ({ page }) => {
   await seedTransactions(page);
   await page.goto('/#/transactions');
@@ -131,7 +171,7 @@ test('一覧の取引を押すと、その取引の編集画面が開く', async
   await expect(page.getByRole('main').getByLabel('メモ')).toHaveValue('ランチ');
 });
 
-test('スマホ幅でも、取引の一覧と月の切り替え、収支区分とカテゴリの絞り込みが横にはみ出さない', async ({
+test('スマホ幅でも、取引の一覧と月の切り替え、口座・収支区分・カテゴリの絞り込みが横にはみ出さない', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 667 });
@@ -139,6 +179,7 @@ test('スマホ幅でも、取引の一覧と月の切り替え、収支区分�
   await page.goto('/#/transactions');
   await expect(page.getByRole('main').getByRole('listitem')).toHaveCount(2);
   await expect(page.getByRole('button', { name: '翌月' })).toBeInViewport();
+  await expect(page.getByRole('main').getByLabel('口座')).toBeInViewport();
   await expect(page.getByRole('main').getByLabel('収支区分')).toBeInViewport();
   await expect(page.getByRole('main').getByLabel('カテゴリ')).toBeInViewport();
   const overflow = await page.evaluate(

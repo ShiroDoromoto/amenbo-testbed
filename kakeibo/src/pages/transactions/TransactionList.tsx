@@ -20,6 +20,7 @@ import {
 } from '../../lib/date.ts';
 import { formatYen, type Yen } from '../../lib/money.ts';
 import { hashFromPath } from '../../router/index.ts';
+import { filterTransactionsByAccount } from './filterTransactionsByAccount.ts';
 import { groupTransactionsByDate, type TransactionDay } from './groupTransactionsByDate.ts';
 import './transactionList.css';
 
@@ -30,6 +31,8 @@ type Loaded = {
   /** 並び順に並べたカテゴリ。絞り込みの選択肢に出す。 */
   categories: Category[];
   categoryNames: ReadonlyMap<string, string>;
+  /** 絞り込みの選択肢に出す口座。名前順。 */
+  accounts: Account[];
   accountNames: ReadonlyMap<string, string>;
 };
 
@@ -101,6 +104,7 @@ function subtotalClass(subtotal: Yen): string {
 /**
  * 取引の一覧画面。1か月分の取引を日付の新しい順に、日ごとにまとめて出す。
  * 最初は今日の月を出し、前月・翌月のボタンで月を切り替える。
+ * 口座を選ぶと、その口座が関わる取引だけに絞り込む。月を切り替えても絞り込みは保つ。
  * 日ごとに収支の小計を添え、取引を押すと編集画面を開く。
  * 収支区分やカテゴリを選ぶと、その取引だけを出す。選んだものは、月を切り替えても残す。
  * 収支区分を選ぶと、カテゴリの選択肢はその区分のものだけにする。
@@ -108,6 +112,8 @@ function subtotalClass(subtotal: Yen): string {
 export function TransactionList({ dbName, today }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(today ?? toDateString(new Date())));
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  /** 絞り込む口座の id。空文字はすべての口座。 */
+  const [accountId, setAccountId] = useState('');
   /** 絞り込むカテゴリの id。空文字はすべてのカテゴリ。 */
   const [categoryId, setCategoryId] = useState('');
   /** 絞り込む収支区分。空文字はすべての区分。 */
@@ -130,6 +136,7 @@ export function TransactionList({ dbName, today }: Props) {
         transactions: transactions.reverse(),
         categories,
         categoryNames: namesById(categories),
+        accounts,
         accountNames: namesById(accounts),
       });
     })();
@@ -188,10 +195,25 @@ export function TransactionList({ dbName, today }: Props) {
     if (next !== '' && selected && selected.type !== next) setCategoryId('');
   }
 
-  function filters(categories: readonly Category[]) {
+  function filters(accounts: readonly Account[], categories: readonly Category[]) {
     const groups = incomeExpenseLabels.filter((g) => typeFilter === '' || g.type === typeFilter);
     return (
       <div class="transaction-filter">
+        <div class="transaction-filter-field">
+          <label for="transaction-filter-account">口座</label>
+          <select
+            id="transaction-filter-account"
+            value={accountId}
+            onChange={(e) => setAccountId(e.currentTarget.value)}
+          >
+            <option value="">すべての口座</option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div class="transaction-filter-field">
           <label for="transaction-filter-type">収支区分</label>
           <select
@@ -240,19 +262,22 @@ export function TransactionList({ dbName, today }: Props) {
 
   function body() {
     if (!loaded || loaded.month !== month) return <p>読み込み中…</p>;
-    if (loaded.transactions.length === 0) {
-      return (
-        <p>
-          {monthLabel(month)}の取引はありません。
-          <a href={hashFromPath('/transactions/new')}>取引を入力する</a>
-        </p>
-      );
-    }
-    const transactions = filterTransactions(loaded.transactions, typeFilter, categoryId);
+    const byAccount =
+      accountId === ''
+        ? loaded.transactions
+        : filterTransactionsByAccount(loaded.transactions, accountId);
+    const transactions = filterTransactions(byAccount, typeFilter, categoryId);
     if (transactions.length === 0) {
+      let target = monthLabel(month);
+      if (accountId !== '') target += `の${loaded.accountNames.get(accountId) ?? missingName}`;
+      if (categoryId !== '' || typeFilter !== '')
+        target += `の「${filterName(loaded.categoryNames)}」`;
       return (
         <p>
-          {monthLabel(month)}の「{filterName(loaded.categoryNames)}」の取引はありません。
+          {target}の取引はありません。
+          {categoryId === '' && typeFilter === '' && (
+            <a href={hashFromPath('/transactions/new')}>取引を入力する</a>
+          )}
         </p>
       );
     }
@@ -277,7 +302,7 @@ export function TransactionList({ dbName, today }: Props) {
           翌月
         </button>
       </nav>
-      {loaded && filters(loaded.categories)}
+      {loaded && filters(loaded.accounts, loaded.categories)}
       {body()}
     </>
   );
