@@ -5,6 +5,7 @@ import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
 import type { TransactionType } from '../../domain/transaction.ts';
 import type { NewTransaction } from '../../db/repositories/transactions.ts';
+import { loadLastSelection, saveLastSelection } from './lastSelection.ts';
 import {
   validateTransactionInput,
   type TransactionInput,
@@ -47,6 +48,11 @@ type Props = {
   categories: readonly Category[];
   accounts: readonly Account[];
   defaults: TransactionFormDefaults;
+  /**
+   * 前回保存した取引のカテゴリと口座を覚えておき、`defaults` で決まっていない欄の初期値にする。
+   * 新しく取引を入力するときに使う。
+   */
+  rememberSelection?: boolean;
   onSubmit: (transaction: NewTransaction) => void | Promise<void>;
 };
 
@@ -55,14 +61,13 @@ type Props = {
  * 保存できたらフォームを `defaults` の状態に戻し、トーストで知らせる。
  * `ToastProvider` の中で使う。
  */
-export function TransactionForm({ categories, accounts, defaults, onSubmit }: Props) {
-  const initialInput: TransactionInput = {
-    date: defaults.date,
-    amount: defaults.amount === undefined ? '' : String(defaults.amount),
-    categoryId: defaults.categoryId ?? '',
-    accountId: defaults.accountId ?? accounts[0]?.id ?? '',
-    toAccountId: defaults.toAccountId ?? '',
-  };
+export function TransactionForm({
+  categories,
+  accounts,
+  defaults,
+  rememberSelection = false,
+  onSubmit,
+}: Props) {
   const initialType = defaults.type ?? 'expense';
   const initialMemo = defaults.memo ?? '';
   const [input, setInput] = useState<TransactionInput>(initialInput);
@@ -80,14 +85,39 @@ export function TransactionForm({ categories, accounts, defaults, onSubmit }: Pr
   const validation = validateTransactionInput(input, type);
   const errors: TransactionInputErrors = submitted && !validation.ok ? validation.errors : {};
 
+  /** 前回選んだカテゴリのうち、いまも在って `type` に属するもの。覚えていなければ空文字。 */
+  function rememberedCategoryId(type: TransactionType): string {
+    if (!rememberSelection || type === 'transfer') return '';
+    const remembered = loadLastSelection().categoryIds[type];
+    return categories.some((c) => c.id === remembered && c.type === type) ? remembered! : '';
+  }
+
+  /** 前回選んだ口座のうち、いまも在るもの。 */
+  function rememberedAccountId(): string | undefined {
+    if (!rememberSelection) return undefined;
+    const remembered = loadLastSelection().accountId;
+    return accounts.some((a) => a.id === remembered) ? remembered : undefined;
+  }
+
+  function initialInput(): TransactionInput {
+    return {
+      date: defaults.date,
+      amount: defaults.amount === undefined ? '' : String(defaults.amount),
+      categoryId: defaults.categoryId ?? rememberedCategoryId(initialType),
+      accountId: defaults.accountId ?? rememberedAccountId() ?? accounts[0]?.id ?? '',
+      toAccountId: defaults.toAccountId ?? '',
+    };
+  }
+
   function update(field: TransactionInputField, value: string) {
     setInput((prev) => ({ ...prev, [field]: value }));
   }
 
   function changeType(value: TransactionType) {
     setType(value);
-    // カテゴリはどちらか一方の収支区分に属するので、区分を変えたら選び直してもらう。振替はカテゴリを持たない。
-    update('categoryId', '');
+    // カテゴリはどちらか一方の収支区分に属するので、区分を変えたら選び直してもらう。
+    // 覚えていれば、その区分で前回選んだカテゴリにする。振替はカテゴリを持たない。
+    update('categoryId', rememberedCategoryId(value));
   }
 
   async function handleSubmit(event: Event) {
@@ -100,8 +130,9 @@ export function TransactionForm({ categories, accounts, defaults, onSubmit }: Pr
       return;
     }
     setSaving(true);
+    const transaction: NewTransaction = { ...validation.value, memo: memo.trim() };
     try {
-      await onSubmit({ ...validation.value, memo: memo.trim() });
+      await onSubmit(transaction);
     } catch {
       // 入力は残し、直すか押し直せるようにする。
       toast.show('保存できませんでした', { kind: 'error' });
@@ -109,12 +140,13 @@ export function TransactionForm({ categories, accounts, defaults, onSubmit }: Pr
     } finally {
       setSaving(false);
     }
+    if (rememberSelection) saveLastSelection(transaction);
     reset();
     toast.show('保存しました', { kind: 'success' });
   }
 
   function reset() {
-    setInput(initialInput);
+    setInput(initialInput());
     setType(initialType);
     setMemo(initialMemo);
     setSubmitted(false);

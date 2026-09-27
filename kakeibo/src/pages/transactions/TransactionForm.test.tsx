@@ -19,9 +19,14 @@ const accounts: Account[] = [
 afterEach(() => {
   render(null, document.body.firstElementChild!);
   document.body.innerHTML = '';
+  localStorage.clear();
 });
 
-function renderForm(onSubmit = vi.fn(), accountList: Account[] = accounts) {
+function renderForm(
+  onSubmit = vi.fn(),
+  accountList: Account[] = accounts,
+  rememberSelection = false,
+) {
   const root = document.createElement('div');
   document.body.append(root);
   render(
@@ -30,6 +35,7 @@ function renderForm(onSubmit = vi.fn(), accountList: Account[] = accounts) {
         categories={categories}
         accounts={accountList}
         defaults={{ date: '2026-09-28' }}
+        rememberSelection={rememberSelection}
         onSubmit={onSubmit}
       />
     </ToastProvider>,
@@ -345,4 +351,66 @@ test('振替を初期値に渡すと、振替の欄にその値を入れて出�
   expect(form.querySelector<HTMLInputElement>('[name="type"]:checked')?.value).toBe('transfer');
   expect(form.querySelector<HTMLSelectElement>('[name="accountId"]')!.value).toBe('bank');
   expect(form.querySelector<HTMLSelectElement>('[name="toAccountId"]')!.value).toBe('cash');
+});
+
+test('前回保存したカテゴリと口座を、次の入力の初期値にする', async () => {
+  const first = renderForm(vi.fn(), accounts, true);
+  await act(() => {
+    type(first.field('amount'), '500');
+    choose(first.field('categoryId'), 'food');
+    choose(first.field('accountId'), 'bank');
+  });
+  await submit(first.form);
+  // 保存したあとに戻したフォームでも、選んだものが残る。
+  expect(first.field<HTMLSelectElement>('categoryId').value).toBe('food');
+  expect(first.field<HTMLSelectElement>('accountId').value).toBe('bank');
+  expect(first.field<HTMLInputElement>('amount').value).toBe('');
+
+  render(null, document.body.firstElementChild!);
+  document.body.innerHTML = '';
+  const second = renderForm(vi.fn(), accounts, true);
+  expect(second.field<HTMLSelectElement>('categoryId').value).toBe('food');
+  expect(second.field<HTMLSelectElement>('accountId').value).toBe('bank');
+});
+
+test('収支区分を切り替えると、その区分で前回選んだカテゴリにする', async () => {
+  const { form, field } = renderForm(vi.fn(), accounts, true);
+  await act(() => form.querySelector<HTMLInputElement>('input[value="income"]')!.click());
+  await act(() => {
+    type(field('amount'), '1000');
+    choose(field('categoryId'), 'salary');
+  });
+  await submit(form);
+
+  await act(() => form.querySelector<HTMLInputElement>('input[value="income"]')!.click());
+  expect(field<HTMLSelectElement>('categoryId').value).toBe('salary');
+  // 支出ではまだ選んだことが無いので、選び直しになる。
+  await act(() => form.querySelector<HTMLInputElement>('input[value="expense"]')!.click());
+  expect(field<HTMLSelectElement>('categoryId').value).toBe('');
+});
+
+test('前回選んだカテゴリや口座が消えていたら、初期値にしない', () => {
+  localStorage.setItem(
+    'kakeibo:lastSelection',
+    JSON.stringify({ categoryIds: { expense: 'gone' }, accountId: 'gone' }),
+  );
+  const { field } = renderForm(vi.fn(), accounts, true);
+  expect(field<HTMLSelectElement>('categoryId').value).toBe('');
+  expect(field<HTMLSelectElement>('accountId').value).toBe('cash');
+});
+
+test('覚える指定が無ければ、前回の選択を使わない', async () => {
+  const first = renderForm(vi.fn(), accounts, true);
+  await act(() => {
+    type(first.field('amount'), '500');
+    choose(first.field('categoryId'), 'food');
+    choose(first.field('accountId'), 'bank');
+  });
+  await submit(first.form);
+
+  render(null, document.body.firstElementChild!);
+  document.body.innerHTML = '';
+  const { field } = renderForm();
+  expect(field<HTMLSelectElement>('categoryId').value).toBe('');
+  expect(field<HTMLSelectElement>('accountId').value).toBe('cash');
 });

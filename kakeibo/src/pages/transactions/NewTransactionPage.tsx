@@ -19,7 +19,10 @@ type Props = {
   dbName?: string;
 };
 
-/** 取引の入力画面。カテゴリと口座を DB から読み、入力された取引を DB に足す。 */
+/**
+ * 取引の入力画面。カテゴリと口座を DB から読み、入力された取引を DB に足す。
+ * カテゴリと口座は、前回保存したときに選んだものを初期値にする。
+ */
 export function NewTransactionPage({ dbName }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
@@ -50,6 +53,7 @@ export function NewTransactionPage({ dbName }: Props) {
           categories={loaded.categories}
           accounts={loaded.accounts}
           defaults={{ date: toDateString(new Date()) }}
+          rememberSelection
           onSubmit={save}
         />
       ) : (
