@@ -241,9 +241,98 @@ test('年をまたいで月を切り替える', async () => {
   expect(monthLabel()).toBe('2026年2月');
 });
 
+async function selectCategory(value: string) {
+  const select = await waitFor(() =>
+    document.querySelector<HTMLSelectElement>('#transaction-filter-category'),
+  );
+  select.value = value;
+  await act(() => {
+    select.dispatchEvent(new Event('change'));
+  });
+}
+
+test('カテゴリの選択肢は、支出と収入に分けて並び順に出す', async () => {
+  const db = await openKakeiboDB(testDbName);
+  const categories = await listCategories(db);
+  db.close();
+  renderPage();
+  const select = await waitFor(() =>
+    document.querySelector<HTMLSelectElement>('#transaction-filter-category'),
+  );
+
+  expect(select.value).toBe('');
+  expect([...select.querySelectorAll('optgroup')].map((g) => g.label)).toEqual(['支出', '収入']);
+  const [expenses, incomes] = [...select.querySelectorAll('optgroup')].map((g) =>
+    [...g.querySelectorAll('option')].map((o) => o.value),
+  );
+  expect(expenses).toEqual(categories.filter((c) => c.type === 'expense').map((c) => c.id));
+  expect(incomes).toEqual(categories.filter((c) => c.type === 'income').map((c) => c.id));
+});
+
+test('カテゴリを選ぶと、そのカテゴリの取引だけを出し、振替は出さない', async () => {
+  const { expense, lunch } = await setup();
+  renderPage();
+  await days();
+
+  await selectCategory(expense.id);
+  await waitFor(async () => (await days()).length === 1);
+  expect(await days()).toEqual([
+    { date: '2026-09-10', subtotal: '小計-800円', links: [`#/transactions/${lunch.id}`] },
+  ]);
+
+  await selectCategory('');
+  expect(await days()).toHaveLength(3);
+});
+
+test('選んだカテゴリの取引が無ければ、その旨を出す', async () => {
+  const { expense } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  const other = (await listCategories(db, 'expense')).find((c) => c.id !== expense.id)!;
+  db.close();
+  renderPage();
+  await days();
+
+  await selectCategory(other.id);
+  const message = await emptyMessage();
+  expect(message.textContent).toBe(`2026年9月の「${other.name}」の取引はありません。`);
+  expect(document.querySelector('.transaction-list')).toBeNull();
+});
+
+test('選んだカテゴリは、月を切り替えても残す', async () => {
+  const { cash, expense, income } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  const august = await addTransaction(db, {
+    date: '2026-08-31',
+    amount: 100,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: '',
+  });
+  await addTransaction(db, {
+    date: '2026-08-25',
+    amount: 1000,
+    type: 'income',
+    categoryId: income.id,
+    accountId: cash.id,
+    memo: '',
+  });
+  db.close();
+  renderPage();
+  await days();
+
+  await selectCategory(expense.id);
+  await clickButton('前月');
+  await waitFor(async () => monthLabel() === '2026年8月' && (await days()).length === 1);
+  expect((await days())[0]!.links).toEqual([`#/transactions/${august.id}`]);
+  expect(document.querySelector<HTMLSelectElement>('#transaction-filter-category')!.value).toBe(
+    expense.id,
+  );
+});
+
 async function selectAccount(name: string) {
   const select = await waitFor(() =>
-    document.querySelector<HTMLSelectElement>('.transaction-filter select'),
+    document.querySelector<HTMLSelectElement>('#transaction-filter-account'),
   );
   const option = await waitFor(() => [...select.options].find((o) => o.textContent === name));
   await act(() => {
@@ -311,4 +400,20 @@ test('月を切り替えても、口座の絞り込みを保つ', async () => {
   await clickButton('前月');
   await waitFor(async () => (await rows()).length === 2);
   expect((await rows()).map((a) => a.getAttribute('href'))).toContain(`#/transactions/${lunch.id}`);
+});
+
+test('口座とカテゴリを両方選ぶと、どちらにも当てはまる取引だけを出す', async () => {
+  const { expense, income, lunch } = await setup();
+  renderPage();
+  await days();
+
+  await selectAccount('現金');
+  await selectCategory(expense.id);
+  await waitFor(async () => (await rows()).length === 1);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([`#/transactions/${lunch.id}`]);
+
+  await selectCategory(income.id);
+  expect((await emptyMessage()).textContent).toMatch(
+    /^2026年9月の現金の「.+」の取引はありません。$/,
+  );
 });

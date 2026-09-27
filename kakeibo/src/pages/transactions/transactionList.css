@@ -38,6 +38,10 @@
   margin-bottom: var(--space-4);
 }
 
+.transaction-filter label {
+  white-space: nowrap;
+}
+
 .transaction-filter select {
   flex: 1;
   min-width: 0;
