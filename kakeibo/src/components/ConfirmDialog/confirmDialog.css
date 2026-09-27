@@ -1,0 +1,90 @@
+/* 画面全体を背景で覆い、真ん中にダイアログを出す。スマホ幅では左右の余白だけ残して広げる。 */
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--color-backdrop);
+}
+
+.confirm-dialog {
+  width: 100%;
+  max-width: 24rem;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-overlay);
+}
+
+/* 中の文字を押したときに、ダイアログ全体へ枠線を出さない。 */
+.confirm-dialog:focus {
+  outline: none;
+}
+
+.confirm-dialog-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.confirm-dialog-message {
+  margin-top: var(--space-3);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog-message > :first-child {
+  margin-top: 0;
+}
+
+.confirm-dialog-message > :last-child {
+  margin-bottom: 0;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.confirm-dialog-button {
+  padding: var(--space-2) var(--space-5);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: inherit;
+  cursor: pointer;
+}
+
+.confirm-dialog-cancel {
+  border-color: var(--color-border);
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+.confirm-dialog-confirm {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+}
+
+.confirm-dialog-danger {
+  color: var(--color-on-primary);
+  background: var(--color-danger);
+}
+
+/* スマホ幅では、ボタンを縦に並べて横いっぱいにする。確定を上に置く。 */
+@media (max-width: 640px) {
+  .confirm-dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .confirm-dialog-button {
+    width: 100%;
+  }
+}
