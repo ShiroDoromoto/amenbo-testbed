@@ -192,7 +192,26 @@ test('一覧の取引を押すと、その取引の編集画面が開く', async
   await expect(page.getByRole('main').getByLabel('メモ')).toHaveValue('ランチ');
 });
 
-test('スマホ幅でも、取引の一覧と月の切り替え、口座・収支区分・カテゴリの絞り込み、メモの検索、金額の範囲が横にはみ出さない', async ({
+test('並び順を選ぶと、金額や日付の順に並べ替わる', async ({ page }) => {
+  await seedTransactions(page);
+  await page.goto('/#/transactions');
+  const main = page.getByRole('main');
+  const links = main.getByRole('link', { name: /ランチ|長いメモ/ });
+  await expect(links).toHaveCount(2);
+  await expect(links.first()).toHaveAttribute('href', '#/transactions/e2e-dinner');
+
+  await main.getByLabel('並び順').selectOption({ label: '日付の古い順' });
+  await expect(links.first()).toHaveAttribute('href', '#/transactions/e2e-lunch');
+
+  await main.getByLabel('並び順').selectOption({ label: '金額の小さい順' });
+  await expect(links.first()).toHaveAttribute('href', '#/transactions/e2e-lunch');
+  await expect(links.first()).toContainText('2026-09-10');
+
+  await main.getByLabel('並び順').selectOption({ label: '金額の大きい順' });
+  await expect(links.first()).toHaveAttribute('href', '#/transactions/e2e-dinner');
+});
+
+test('スマホ幅でも、取引の一覧と月の切り替え、口座・収支区分・カテゴリの絞り込み、メモの検索、金額の範囲、並び順が横にはみ出さない', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 667 });
@@ -206,6 +225,9 @@ test('スマホ幅でも、取引の一覧と月の切り替え、口座・収�
   await expect(page.getByRole('main').getByLabel('メモ')).toBeInViewport();
   await expect(page.getByRole('main').getByLabel('金額の下限')).toBeInViewport();
   await expect(page.getByRole('main').getByLabel('金額の上限')).toBeInViewport();
+  await expect(page.getByRole('main').getByLabel('並び順')).toBeInViewport();
+  await page.getByRole('main').getByLabel('並び順').selectOption({ label: '金額の大きい順' });
+  await expect(page.getByRole('main').locator('.transaction-list-date')).toHaveCount(2);
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
