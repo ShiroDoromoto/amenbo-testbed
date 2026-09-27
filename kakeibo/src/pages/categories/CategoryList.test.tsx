@@ -6,6 +6,8 @@ import { deleteDB } from 'idb';
 import { ToastProvider } from '../../components/Toast/index.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { deleteCategory, listCategories } from '../../db/repositories/categories.ts';
+import { addRecurringTransaction } from '../../db/repositories/recurring.ts';
+import { addTransaction } from '../../db/repositories/transactions.ts';
 import { defaultCategories } from '../../db/seed.ts';
 import { CategoryList, newCategoryColor } from './CategoryList.tsx';
 
@@ -157,4 +159,112 @@ test('収支区分にカテゴリが無ければ、無い旨を出す', async ()
       (p) => p.textContent === '収入のカテゴリはまだありません。',
     ),
   );
+});
+
+const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
+
+/** 確認ダイアログの中の、文言が `label` のボタン。行の「削除する」と区別する。 */
+const dialogButton = (label: string) =>
+  [...(dialog()?.querySelectorAll('button') ?? [])].find((b) => b.textContent === label);
+
+/** 収支区分 `type` の、名前が `name` のカテゴリの id。 */
+async function categoryId(type: 'expense' | 'income', name: string): Promise<string> {
+  const db = await openKakeiboDB(testDbName);
+  const category = (await listCategories(db, type)).find((c) => c.name === name)!;
+  db.close();
+  return category.id;
+}
+
+const expense = (categoryId: string) =>
+  ({
+    date: '2026-01-01',
+    amount: 1000,
+    type: 'expense',
+    categoryId,
+    accountId: 'a',
+    memo: '',
+  }) as const;
+
+test('使われていないカテゴリは、確認のあとに消す', async () => {
+  renderPage();
+  await waitFor(() => document.querySelector('.category-list'));
+  await act(() => button('日用品を削除する')!.click());
+
+  const el = await waitFor(dialog);
+  expect(el.textContent).toContain('「日用品」を削除しますか？');
+  expect(el.textContent).toContain('この操作は取り消せません。');
+  expect(el.querySelector('select')).toBeNull();
+
+  await act(() => dialogButton('削除する')!.click());
+  await waitFor(() => !namesIn('支出').includes('日用品'));
+  expect(dialog()).toBeNull();
+
+  const db = await openKakeiboDB(testDbName);
+  const names = (await listCategories(db, 'expense')).map((c) => c.name);
+  db.close();
+  expect(names).not.toContain('日用品');
+});
+
+test('使われているカテゴリは、選んだカテゴリへ取引と定期取引を付け替えてから消す', async () => {
+  const food = await categoryId('expense', '食費');
+  const daily = await categoryId('expense', '日用品');
+  const db = await openKakeiboDB(testDbName);
+  const moved = await addTransaction(db, expense(food));
+  const recurring = await addRecurringTransaction(db, { ...expense(food), dayOfMonth: 1 });
+  db.close();
+
+  renderPage();
+  await waitFor(() => document.querySelector('.category-list'));
+  await act(() => button('食費を削除する')!.click());
+
+  const el = await waitFor(dialog);
+  expect(el.textContent).toContain('このカテゴリを使っている取引 1 件と定期取引 1 件を');
+  const select = el.querySelector('select')!;
+  const expenseNames = defaultCategories
+    .filter((c) => c.type === 'expense' && c.name !== '食費')
+    .map((c) => c.name);
+  expect([...select.options].map((o) => o.textContent)).toEqual(expenseNames);
+
+  await act(() => {
+    select.value = daily;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await act(() => dialogButton('削除する')!.click());
+  await waitFor(() => !namesIn('支出').includes('食費'));
+
+  const after = await openKakeiboDB(testDbName);
+  expect(await after.get('categories', food)).toBeUndefined();
+  expect(await after.get('transactions', moved.id)).toMatchObject({ categoryId: daily });
+  expect(await after.get('recurringTransactions', recurring.id)).toMatchObject({
+    categoryId: daily,
+  });
+  after.close();
+});
+
+test('削除をキャンセルすると、何も消さない', async () => {
+  renderPage();
+  await waitFor(() => document.querySelector('.category-list'));
+  await act(() => button('給与を削除する')!.click());
+  await waitFor(dialog);
+  await act(() => dialogButton('キャンセル')!.click());
+
+  expect(dialog()).toBeNull();
+  expect(namesIn('収入')).toContain('給与');
+});
+
+test('使われているのに付け替え先が無ければ、確認を出さずにエラーを出す', async () => {
+  const db = await openKakeiboDB(testDbName);
+  const income = await listCategories(db, 'income');
+  for (const c of income.slice(1)) await deleteCategory(db, c.id);
+  await addTransaction(db, { ...expense(income[0]!.id), type: 'income' });
+  db.close();
+
+  renderPage();
+  await waitFor(() => document.querySelector('.category-list'));
+  await act(() => button(`${income[0]!.name}を削除する`)!.click());
+
+  const alert = await waitFor(() => document.querySelector('[role="alert"]'));
+  expect(alert.textContent).toContain('付け替え先を選べません');
+  expect(dialog()).toBeNull();
+  expect(namesIn('収入')).toEqual([income[0]!.name]);
 });
