@@ -15,6 +15,8 @@
   /* 収入と支出の金額 */
   --color-income: #1a7f37;
   --color-expense: #cf222e;
+  /* 入力のエラー */
+  --color-danger: #cf222e;
   /* トーストなど、画面に重ねて出す通知 */
   --color-toast-text: #ffffff;
   --color-toast-bg: #1f2328;
