@@ -6,8 +6,9 @@ import { openKakeiboDB } from '../../db/index.ts';
 import { listAccounts } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
 import { listTransactionsNewestFirst } from '../../db/repositories/transactions.ts';
-import { formatYen } from '../../lib/money.ts';
+import { formatYen, type Yen } from '../../lib/money.ts';
 import { hashFromPath } from '../../router/index.ts';
+import { groupTransactionsByDate, type TransactionDay } from './groupTransactionsByDate.ts';
 import './transactionList.css';
 
 type Loaded = {
@@ -35,7 +36,21 @@ function signedAmount(transaction: Transaction): string {
   return formatYen(transaction.amount);
 }
 
-/** 取引の一覧画面。すべての取引を日付の新しい順に出し、押すと編集画面を開く。 */
+/** 小計に符号を付ける。増えた日は `+`、減った日は `-`、0 は符号なし。 */
+function signedSubtotal(subtotal: Yen): string {
+  return subtotal > 0 ? `+${formatYen(subtotal)}` : formatYen(subtotal);
+}
+
+function subtotalClass(subtotal: Yen): string {
+  if (subtotal > 0) return 'transaction-day-subtotal transaction-day-subtotal-income';
+  if (subtotal < 0) return 'transaction-day-subtotal transaction-day-subtotal-expense';
+  return 'transaction-day-subtotal';
+}
+
+/**
+ * 取引の一覧画面。すべての取引を日付の新しい順に、日ごとにまとめて出す。
+ * 日ごとに収支の小計を添え、取引を押すと編集画面を開く。
+ */
 export function TransactionList({ dbName }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
@@ -73,9 +88,6 @@ export function TransactionList({ dbName }: Props) {
     return (
       <li key={transaction.id}>
         <a class="transaction-list-item" href={hashFromPath(`/transactions/${transaction.id}`)}>
-          <time class="transaction-list-date" dateTime={transaction.date}>
-            {transaction.date}
-          </time>
           <span class="transaction-list-title">{title}</span>
           <span class={`transaction-list-amount transaction-list-amount-${transaction.type}`}>
             {signedAmount(transaction)}
@@ -89,6 +101,23 @@ export function TransactionList({ dbName }: Props) {
     );
   }
 
+  function day({ date, transactions, subtotal }: TransactionDay, loaded: Loaded) {
+    return (
+      <section key={date} class="transaction-day">
+        <h3 class="transaction-day-header">
+          <time class="transaction-day-date" dateTime={date}>
+            {date}
+          </time>
+          <span class={subtotalClass(subtotal)}>
+            <span class="transaction-day-subtotal-label">小計</span>
+            {signedSubtotal(subtotal)}
+          </span>
+        </h3>
+        <ul class="transaction-day-items">{transactions.map((t) => row(t, loaded))}</ul>
+      </section>
+    );
+  }
+
   function body() {
     if (!loaded) return <p>読み込み中…</p>;
     if (loaded.transactions.length === 0) {
@@ -99,7 +128,11 @@ export function TransactionList({ dbName }: Props) {
         </p>
       );
     }
-    return <ul class="transaction-list">{loaded.transactions.map((t) => row(t, loaded))}</ul>;
+    return (
+      <div class="transaction-list">
+        {groupTransactionsByDate(loaded.transactions).map((d) => day(d, loaded))}
+      </div>
+    );
   }
 
   return (
