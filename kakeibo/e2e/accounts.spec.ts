@@ -25,6 +25,25 @@ test('口座を追加し、一覧から開いて直す', async ({ page }) => {
   await expect(main.getByRole('link', { name: /ゆうちょ/ })).toContainText('-5,000円');
 });
 
+test('カード口座の編集で、締め日と引き落とし日を選んで保存する', async ({ page }) => {
+  await page.goto('/#/accounts/new');
+  const main = page.getByRole('main');
+  await main.getByLabel('名前').fill('カード');
+  await main.getByLabel('クレジットカード').check();
+  await main.getByRole('button', { name: '保存する' }).click();
+
+  await main.getByRole('link', { name: /カード/ }).click();
+  await expect(main.getByRole('heading', { name: '口座の編集' })).toBeVisible();
+  await expect(main.getByLabel(/^締め日/)).toHaveValue('');
+  await main.getByLabel(/^締め日/).selectOption('15');
+  await main.getByLabel(/^引き落とし日/).selectOption('10');
+  await main.getByRole('button', { name: '保存する' }).click();
+
+  await main.getByRole('link', { name: /カード/ }).click();
+  await expect(main.getByLabel(/^締め日/)).toHaveValue('15');
+  await expect(main.getByLabel(/^引き落とし日/)).toHaveValue('10');
+});
+
 test('スマホ幅でも、口座の一覧と編集画面が横にはみ出さない', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
   await page.goto('/#/accounts/new');

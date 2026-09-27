@@ -94,3 +94,90 @@ test('id の口座が無ければ、見つからない旨を出す', async () =>
   );
   expect(document.querySelector('form')).toBeNull();
 });
+
+async function setupCard() {
+  const db = await openKakeiboDB(testDbName);
+  const account = await addAccount(db, {
+    name: 'カード',
+    type: 'card',
+    initialBalance: 0,
+    closingDay: 15,
+    paymentDay: null,
+  });
+  db.close();
+  return account;
+}
+
+async function submit(form: HTMLFormElement) {
+  await act(async () => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+}
+
+async function savedAccount(id: string) {
+  await waitFor(() => window.location.hash === '#/accounts');
+  const check = await openKakeiboDB(testDbName);
+  const saved = await getAccount(check, id);
+  check.close();
+  return saved;
+}
+
+test('カード以外の口座では、締め日と引き落とし日の欄を出さない', async () => {
+  const account = await setup();
+  renderPage(account.id);
+  const form = await waitFor(() => document.querySelector('form'));
+  expect(form.querySelector('[name="closingDay"]')).toBeNull();
+  expect(form.querySelector('[name="paymentDay"]')).toBeNull();
+});
+
+test('カードの締め日と引き落とし日を出し、直した日で保存する', async () => {
+  const account = await setupCard();
+  renderPage(account.id);
+  const form = await waitFor(() => document.querySelector('form'));
+  const select = (name: string) => form.querySelector<HTMLSelectElement>(`[name="${name}"]`)!;
+  expect(select('closingDay').value).toBe('15');
+  expect(select('paymentDay').value).toBe('');
+
+  await act(() => {
+    select('closingDay').value = '31';
+    select('closingDay').dispatchEvent(new Event('change', { bubbles: true }));
+    select('paymentDay').value = '27';
+    select('paymentDay').dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await submit(form);
+
+  expect(await savedAccount(account.id)).toMatchObject({ closingDay: 31, paymentDay: 27 });
+});
+
+test('カードの締め日と引き落とし日は、決めていないに戻せる', async () => {
+  const account = await setupCard();
+  renderPage(account.id);
+  const form = await waitFor(() => document.querySelector('form'));
+
+  await act(() => {
+    const closing = form.querySelector<HTMLSelectElement>('[name="closingDay"]')!;
+    closing.value = '';
+    closing.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await submit(form);
+
+  expect(await savedAccount(account.id)).toMatchObject({ closingDay: null, paymentDay: null });
+});
+
+test('カードから別の種類に変えると、締め日と引き落とし日を消す', async () => {
+  const account = await setupCard();
+  renderPage(account.id);
+  const form = await waitFor(() => document.querySelector('form'));
+
+  await act(() => {
+    form.querySelector<HTMLInputElement>('[name="type"][value="bank"]')!.click();
+  });
+  expect(form.querySelector('[name="closingDay"]')).toBeNull();
+  await submit(form);
+
+  expect(await savedAccount(account.id)).toMatchObject({
+    type: 'bank',
+    closingDay: null,
+    paymentDay: null,
+  });
+});
