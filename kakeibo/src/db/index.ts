@@ -17,6 +17,7 @@ export interface KakeiboDB extends DBSchema {
       'by-date': string;
       'by-category': string;
       'by-account': string;
+      'by-to-account': string;
     };
   };
   categories: {

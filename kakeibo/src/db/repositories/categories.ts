@@ -1,6 +1,6 @@
 import type { KakeiboDBConnection } from '../index.ts';
 import { compareCategories, type Category } from '../../domain/category.ts';
-import type { TransactionType } from '../../domain/transaction.ts';
+import type { IncomeExpenseType } from '../../domain/transaction.ts';
 
 export type NewCategory = Omit<Category, 'id'>;
 
@@ -42,7 +42,7 @@ export async function getCategory(
  */
 export async function listCategories(
   db: KakeiboDBConnection,
-  type?: TransactionType,
+  type?: IncomeExpenseType,
 ): Promise<Category[]> {
   const categories = await db.getAll('categories');
   return categories.filter((c) => type === undefined || c.type === type).sort(compareCategories);
