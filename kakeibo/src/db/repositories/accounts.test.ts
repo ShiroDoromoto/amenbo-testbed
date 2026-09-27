@@ -33,7 +33,20 @@ describe('addAccount', () => {
     const added = await addAccount(db, newAccount({ name: '普通預金', type: 'bank' }));
     expect(added.id).not.toBe('');
     expect(await db.get('accounts', added.id)).toEqual(added);
-    expect(added).toEqual({ ...newAccount({ name: '普通預金', type: 'bank' }), id: added.id });
+    expect(added).toEqual({
+      ...newAccount({ name: '普通預金', type: 'bank' }),
+      closingDay: null,
+      paymentDay: null,
+      id: added.id,
+    });
+  });
+
+  it('keeps the closing and payment days of a card', async () => {
+    const added = await addAccount(
+      db,
+      newAccount({ type: 'card', closingDay: 15, paymentDay: 10 }),
+    );
+    expect(await db.get('accounts', added.id)).toMatchObject({ closingDay: 15, paymentDay: 10 });
   });
 
   it('gives each account its own id', async () => {
@@ -58,9 +71,9 @@ describe('updateAccount', () => {
   });
 
   it('throws when the account does not exist', async () => {
-    await expect(updateAccount(db, { ...newAccount(), id: 'missing' })).rejects.toThrow(
-      'Account not found: missing',
-    );
+    await expect(
+      updateAccount(db, { ...newAccount(), closingDay: null, paymentDay: null, id: 'missing' }),
+    ).rejects.toThrow('Account not found: missing');
     expect(await db.count('accounts')).toBe(0);
   });
 });
