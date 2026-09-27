@@ -25,6 +25,13 @@ CI（`.github/workflows/kakeibo-ci.yml`）は、lint・整形の確認・型チ�
 
 書式は Prettier に任せ、ESLint は書式を見ない（`eslint-config-prettier` で書式のルールを切っている）。
 
+## 見た目の値
+
+色・余白・文字サイズは、`src/styles/tokens.css` の CSS 変数（デザイントークン）で決める。
+CSS には値を直に書かず、`var(--color-text)` のようにトークンを参照する。
+新しい値が要るときは、先に `tokens.css` へトークンを足す。
+参照した変数が `tokens.css` に無いと、ユニットテスト（`src/styles/tokens.test.ts`）が落ちる。
+
 ## データのスキーマを変える
 
 データは IndexedDB に置く（`src/db/`）。スキーマのバージョンは、`src/db/migrations/` にある移行の数で決まる。

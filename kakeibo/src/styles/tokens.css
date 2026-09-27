@@ -1,0 +1,34 @@
+/*
+ * デザイントークン。画面の色・余白・文字サイズは、ここの変数から取る。
+ * 値を直に書かず、var(--…) で参照する。
+ */
+:root {
+  /* 色 */
+  --color-text: #1f2328;
+  --color-text-muted: #59636e;
+  --color-bg: #ffffff;
+  --color-surface: #f6f8fa;
+  --color-hover: #f0f0f0;
+  --color-border: #dddddd;
+  --color-primary: #0b6bcb;
+  --color-on-primary: #ffffff;
+  /* 収入と支出の金額 */
+  --color-income: #1a7f37;
+  --color-expense: #cf222e;
+
+  /* 余白 */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* 文字 */
+  --font-family: system-ui, sans-serif;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
+  --line-height: 1.5;
+}

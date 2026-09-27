@@ -6,8 +6,11 @@
 
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
-  line-height: 1.5;
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height);
+  color: var(--color-text);
+  background: var(--color-bg);
 }
 
 .layout {
@@ -22,19 +25,19 @@ body {
 
 .layout-header {
   grid-area: header;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #ddd;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .layout-title {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--font-size-lg);
 }
 
 .layout-nav {
   grid-area: nav;
-  padding: 1rem 0;
-  border-right: 1px solid #ddd;
+  padding: var(--space-4) 0;
+  border-right: 1px solid var(--color-border);
 }
 
 .layout-nav-list {
@@ -45,20 +48,20 @@ body {
 
 .layout-nav-link {
   display: block;
-  padding: 0.5rem 1rem;
+  padding: var(--space-2) var(--space-4);
   color: inherit;
   text-decoration: none;
 }
 
 .layout-nav-link:hover,
 .layout-nav-link:focus-visible {
-  background: #f0f0f0;
+  background: var(--color-hover);
 }
 
 .layout-main {
   grid-area: main;
   min-width: 0;
-  padding: 1rem;
+  padding: var(--space-4);
 }
 
 /* スマホ幅では、ナビをヘッダーの下に横並びで置く */
@@ -75,7 +78,7 @@ body {
   .layout-nav {
     padding: 0;
     border-right: none;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--color-border);
   }
 
   .layout-nav-list {
