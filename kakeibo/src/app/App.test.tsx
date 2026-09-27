@@ -49,6 +49,16 @@ test('`#/transactions/new` では、編集画面ではなく入力画面を出�
   expect(root.querySelector('main h2')?.textContent).toBe('取引の入力');
 });
 
+test.each([
+  ['#/recurring', '定期取引'],
+  ['#/recurring/new', '定期取引の追加'],
+  ['#/recurring/abc', '定期取引の編集'],
+])('%s では、%s の画面を出す', (hash, heading) => {
+  window.location.hash = hash;
+  const root = renderApp();
+  expect(root.querySelector('main h2')?.textContent).toBe(heading);
+});
+
 test('知らないハッシュでは見つからない旨を出す', () => {
   window.location.hash = '#/nowhere';
   const root = renderApp();
