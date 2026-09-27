@@ -63,6 +63,22 @@
   border-radius: var(--radius-md);
 }
 
+/* 金額の下限と上限を「〜」を挟んで並べ、入力欄で残りの幅を分ける。幅が足りなくても折り返さない */
+.transaction-filter-amount {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.transaction-filter-amount > span {
+  white-space: nowrap;
+}
+
+/* 円の整数に直せない入力は、枠を赤くして、絞り込みに使っていないことを示す */
+.transaction-filter-amount [aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
 .transaction-list {
   max-width: 40rem;
 }
