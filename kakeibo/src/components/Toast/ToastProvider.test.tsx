@@ -114,3 +114,18 @@ test('ToastProvider の外で useToast を使うと投げる', () => {
   document.body.append(root);
   expect(() => render(<Capture />, root)).toThrow('ToastProvider');
 });
+
+test('action を渡すとボタンを添え、押すと onClick を呼んでトーストを閉じる', () => {
+  const root = renderProvider();
+  const onClick = vi.fn();
+  act(() => {
+    api.show('削除しました', { action: { label: '元に戻す', onClick } });
+  });
+  const action = root.querySelector<HTMLButtonElement>('.toast-action')!;
+  expect(action.textContent).toBe('元に戻す');
+  act(() => {
+    action.click();
+  });
+  expect(onClick).toHaveBeenCalledTimes(1);
+  expect(messages(root)).toEqual([]);
+});

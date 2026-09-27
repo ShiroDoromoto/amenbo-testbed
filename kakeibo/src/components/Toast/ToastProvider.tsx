@@ -5,10 +5,17 @@ import './toast.css';
 
 export type ToastKind = 'info' | 'success' | 'error';
 
+/** トーストに添えるボタン。押すと `onClick` を呼び、トーストを閉じる。 */
+export type ToastAction = {
+  label: string;
+  onClick: () => void;
+};
+
 export type ToastOptions = {
   kind?: ToastKind;
   /** 自動で消すまでのミリ秒。0 なら、閉じるボタンを押すまで残す。 */
   duration?: number;
+  action?: ToastAction;
 };
 
 export type ToastApi = {
@@ -21,6 +28,7 @@ type ToastItem = {
   id: number;
   message: string;
   kind: ToastKind;
+  action?: ToastAction;
 };
 
 export const DEFAULT_TOAST_DURATION = 4000;
@@ -52,9 +60,12 @@ export function ToastProvider({ children }: Props) {
   }, []);
 
   const show = useCallback(
-    (message: string, { kind = 'info', duration = DEFAULT_TOAST_DURATION }: ToastOptions = {}) => {
+    (
+      message: string,
+      { kind = 'info', duration = DEFAULT_TOAST_DURATION, action }: ToastOptions = {},
+    ) => {
       const id = nextId.current++;
-      setItems((prev) => [...prev, { id, message, kind }]);
+      setItems((prev) => [...prev, { id, message, kind, action }]);
       if (duration > 0) {
         timers.current.set(
           id,
@@ -87,6 +98,18 @@ export function ToastProvider({ children }: Props) {
             role={item.kind === 'error' ? 'alert' : 'status'}
           >
             <p class="toast-message">{item.message}</p>
+            {item.action && (
+              <button
+                type="button"
+                class="toast-action"
+                onClick={() => {
+                  dismiss(item.id);
+                  item.action!.onClick();
+                }}
+              >
+                {item.action.label}
+              </button>
+            )}
             <button
               type="button"
               class="toast-close"
