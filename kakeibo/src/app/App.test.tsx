@@ -53,6 +53,9 @@ test.each([
   ['#/recurring', '定期取引'],
   ['#/recurring/new', '定期取引の追加'],
   ['#/recurring/abc', '定期取引の編集'],
+  ['#/accounts', '口座'],
+  ['#/accounts/new', '口座の追加'],
+  ['#/accounts/abc', '口座の編集'],
   ['#/categories', 'カテゴリ'],
 ])('%s では、%s の画面を出す', (hash, heading) => {
   window.location.hash = hash;
