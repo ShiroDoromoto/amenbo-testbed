@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'preact/hooks';
+import { ConfirmDialog } from '../../components/ConfirmDialog/index.ts';
+import { useToast } from '../../components/Toast/index.ts';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
 import { isIncomeExpenseType, isTransfer, type Transaction } from '../../domain/transaction.ts';
-import { openKakeiboDB } from '../../db/index.ts';
+import { openKakeiboDB, type KakeiboDBConnection } from '../../db/index.ts';
 import { listAccounts } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
-import { listTransactionsByDateRange } from '../../db/repositories/transactions.ts';
+import {
+  deleteTransactions,
+  listTransactionsByDateRange,
+  restoreTransactions,
+} from '../../db/repositories/transactions.ts';
 import { addMonths, endOfMonth, toDateString, type DateString } from '../../lib/date.ts';
 import { formatYen, parseYen, type Yen } from '../../lib/money.ts';
 import { hashFromPath, queryFromHash, replaceHashQuery } from '../../router/index.ts';
+import { UNDO_DELETE_DURATION } from './EditTransactionPage.tsx';
 import { filterTransactionsByAccount } from './filterTransactionsByAccount.ts';
 import { filterTransactionsByAmount } from './filterTransactionsByAmount.ts';
 import { filterTransactionsByMemo } from './filterTransactionsByMemo.ts';
@@ -133,6 +140,8 @@ function subtotalClass(subtotal: Yen): string {
  * 並び順で、日付の古い順や金額の順に並べ替える。金額の順では日ごとにまとめず、取引ごとに日付を添える。
  * 選んだ並び順は、月を切り替えても残す。
  * 月と絞り込みの条件は URL のクエリに持たせ、再読み込みしても残す。
+ * 「選択」を押すと、取引にチェックボックスを出し、選んだ取引を確認ダイアログで確かめてからまとめて削除する。
+ * 選べるのは、いま一覧に出ている取引だけ。削除したあと5秒間は、「元に戻す」でまとめて入れ直せる。
  */
 export function TransactionList({ dbName, today: todayProp }: Props) {
   const [today] = useState(() => todayProp ?? toDateString(new Date()));
@@ -155,6 +164,15 @@ export function TransactionList({ dbName, today: todayProp }: Props) {
   const [maxAmountInput, setMaxAmountInput] = useState(initial.maxAmount);
   const minAmount = parseAmountBound(minAmountInput);
   const maxAmount = parseAmountBound(maxAmountInput);
+  /** 取引を選んで削除する最中か。立てると、取引を編集画面へのリンクでなくチェックボックスにする。 */
+  const [selecting, setSelecting] = useState(false);
+  /** 選んだ取引の id。一覧に出ていない取引の id が残っていても、削除には使わない。 */
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  /** 増やすと、同じ月の取引を DB から読み直す。 */
+  const [reloadCount, setReloadCount] = useState(0);
+  const toast = useToast();
 
   useEffect(() => {
     const query: TransactionListQuery = {
@@ -193,7 +211,61 @@ export function TransactionList({ dbName, today: todayProp }: Props) {
       cancelled = true;
       void opening.then((db) => db.close());
     };
-  }, [dbName, month]);
+  }, [dbName, month, reloadCount]);
+
+  function stopSelecting() {
+    setSelecting(false);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelected(id: string) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  }
+
+  async function undoDelete(transactions: readonly Transaction[]) {
+    let db: KakeiboDBConnection | undefined;
+    try {
+      db = await openKakeiboDB(dbName);
+      await restoreTransactions(db, transactions);
+    } catch {
+      toast.show('元に戻せませんでした', { kind: 'error' });
+      return;
+    } finally {
+      db?.close();
+    }
+    toast.show('元に戻しました', { kind: 'success' });
+    setReloadCount((n) => n + 1);
+  }
+
+  async function removeSelected(targets: readonly Transaction[]) {
+    if (deleting || targets.length === 0) return;
+    setDeleting(true);
+    let db: KakeiboDBConnection | undefined;
+    try {
+      db = await openKakeiboDB(dbName);
+      await deleteTransactions(
+        db,
+        targets.map((t) => t.id),
+      );
+    } catch {
+      toast.show('削除できませんでした', { kind: 'error' });
+      return;
+    } finally {
+      db?.close();
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+    stopSelecting();
+    setReloadCount((n) => n + 1);
+    toast.show(`${targets.length}件の取引を削除しました`, {
+      kind: 'success',
+      duration: UNDO_DELETE_DURATION,
+      action: { label: '元に戻す', onClick: () => void undoDelete(targets) },
+    });
+  }
 
   /** `withDate` を立てると、口座の前に日付を添える。日ごとにまとめないときに使う。 */
   function row(
@@ -208,25 +280,45 @@ export function TransactionList({ dbName, today: todayProp }: Props) {
     const account = isTransfer(transaction)
       ? `${accountName(transaction.accountId)} → ${accountName(transaction.toAccountId)}`
       : accountName(transaction.accountId);
+    const content = (
+      <>
+        <span class="transaction-list-title">{title}</span>
+        <span class={`transaction-list-amount transaction-list-amount-${transaction.type}`}>
+          {signedAmount(transaction)}
+        </span>
+        <span class="transaction-list-detail">
+          {withDate && (
+            <>
+              <time class="transaction-list-date" dateTime={transaction.date}>
+                {transaction.date}
+              </time>
+              {' ・ '}
+            </>
+          )}
+          {account}
+          {transaction.memo !== '' && ` ・ ${transaction.memo}`}
+        </span>
+      </>
+    );
+    if (selecting) {
+      return (
+        <li key={transaction.id}>
+          <label class="transaction-list-item transaction-list-item-selectable">
+            <input
+              type="checkbox"
+              class="transaction-list-check"
+              checked={selectedIds.has(transaction.id)}
+              onChange={() => toggleSelected(transaction.id)}
+            />
+            {content}
+          </label>
+        </li>
+      );
+    }
     return (
       <li key={transaction.id}>
         <a class="transaction-list-item" href={hashFromPath(`/transactions/${transaction.id}`)}>
-          <span class="transaction-list-title">{title}</span>
-          <span class={`transaction-list-amount transaction-list-amount-${transaction.type}`}>
-            {signedAmount(transaction)}
-          </span>
-          <span class="transaction-list-detail">
-            {withDate && (
-              <>
-                <time class="transaction-list-date" dateTime={transaction.date}>
-                  {transaction.date}
-                </time>
-                {' ・ '}
-              </>
-            )}
-            {account}
-            {transaction.memo !== '' && ` ・ ${transaction.memo}`}
-          </span>
+          {content}
         </a>
       </li>
     );
@@ -383,19 +475,75 @@ export function TransactionList({ dbName, today: todayProp }: Props) {
     );
   }
 
-  function body() {
-    if (!loaded || loaded.month !== month) return <p>読み込み中…</p>;
+  /** 絞り込んだあとの、一覧に出す取引。 */
+  function visibleTransactions(loaded: Loaded): readonly Transaction[] {
     const byAccount =
       accountId === ''
         ? loaded.transactions
         : filterTransactionsByAccount(loaded.transactions, accountId);
     const min = minAmount === 'invalid' ? null : minAmount;
     const max = maxAmount === 'invalid' ? null : maxAmount;
-    const transactions = filterTransactionsByAmount(
+    return filterTransactionsByAmount(
       filterTransactionsByMemo(filterTransactions(byAccount, typeFilter, categoryId), keyword),
       min,
       max,
     );
+  }
+
+  function selectionBar(transactions: readonly Transaction[]) {
+    if (!selecting) {
+      if (transactions.length === 0) return null;
+      return (
+        <div class="transaction-select">
+          <button type="button" onClick={() => setSelecting(true)}>
+            選択
+          </button>
+        </div>
+      );
+    }
+    const targets = transactions.filter((t) => selectedIds.has(t.id));
+    const allSelected = transactions.length > 0 && targets.length === transactions.length;
+    return (
+      <div class="transaction-select">
+        <span class="transaction-select-count" aria-live="polite">
+          {targets.length}件を選択中
+        </span>
+        <button
+          type="button"
+          disabled={transactions.length === 0}
+          onClick={() => setSelectedIds(new Set(allSelected ? [] : transactions.map((t) => t.id)))}
+        >
+          {allSelected ? 'すべて外す' : 'すべて選択'}
+        </button>
+        <button
+          type="button"
+          class="transaction-select-delete"
+          disabled={targets.length === 0}
+          onClick={() => setConfirmingDelete(true)}
+        >
+          削除
+        </button>
+        <button type="button" onClick={stopSelecting}>
+          やめる
+        </button>
+        <ConfirmDialog
+          open={confirmingDelete}
+          title={`${targets.length}件の取引を削除しますか？`}
+          confirmLabel="削除する"
+          danger
+          onConfirm={() => void removeSelected(targets)}
+          onCancel={() => setConfirmingDelete(false)}
+        >
+          <p>削除してから5秒間は、元に戻せます。</p>
+        </ConfirmDialog>
+      </div>
+    );
+  }
+
+  function body(transactions: readonly Transaction[] | null) {
+    if (!loaded || !transactions) return <p>読み込み中…</p>;
+    const min = minAmount === 'invalid' ? null : minAmount;
+    const max = maxAmount === 'invalid' ? null : maxAmount;
     if (transactions.length === 0) {
       let target = monthLabel(month);
       if (accountId !== '') target += `の${loaded.accountNames.get(accountId) ?? missingName}`;
@@ -434,6 +582,7 @@ export function TransactionList({ dbName, today: todayProp }: Props) {
     );
   }
 
+  const visible = loaded && loaded.month === month ? visibleTransactions(loaded) : null;
   return (
     <>
       <h2>取引</h2>
@@ -451,7 +600,8 @@ export function TransactionList({ dbName, today: todayProp }: Props) {
       {loaded && filters(loaded.accounts, loaded.categories)}
       {loaded && searchAndSort()}
       {loaded && amountRange()}
-      {body()}
+      {visible && selectionBar(visible)}
+      {body(visible)}
     </>
   );
 }

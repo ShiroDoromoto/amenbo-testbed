@@ -233,3 +233,42 @@ test('スマホ幅でも、取引の一覧と月の切り替え、口座・収�
   );
   expect(overflow).toBe(0);
 });
+
+test('取引を選んでまとめて削除し、「元に戻す」で入れ直せる', async ({ page }) => {
+  await seedTransactions(page);
+  await page.goto('/#/transactions');
+  const main = page.getByRole('main');
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+
+  await main.getByRole('button', { name: '選択', exact: true }).click();
+  await expect(main.getByRole('link')).toHaveCount(0);
+  await main.getByRole('button', { name: 'すべて選択' }).click();
+  await expect(main.getByText('2件を選択中')).toBeVisible();
+  await main.getByRole('button', { name: '削除', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '削除する' }).click();
+
+  await expect(page.getByText('2件の取引を削除しました')).toBeVisible();
+  await expect(main.getByText('2026年9月の取引はありません')).toBeVisible();
+
+  await page.getByRole('button', { name: '元に戻す' }).click();
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+  await expect(main.getByRole('link', { name: /ランチ/ })).toBeVisible();
+});
+
+test('スマホ幅でも、取引を選ぶ最中のボタンとチェックボックスが横にはみ出さない', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await seedTransactions(page);
+  await page.goto('/#/transactions');
+  const main = page.getByRole('main');
+  await main.getByRole('button', { name: '選択', exact: true }).click();
+  await expect(main.getByRole('checkbox')).toHaveCount(2);
+  await expect(main.getByRole('button', { name: 'すべて選択' })).toBeInViewport();
+  await expect(main.getByRole('button', { name: '削除', exact: true })).toBeInViewport();
+  await expect(main.getByRole('button', { name: 'やめる' })).toBeInViewport();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(0);
+});

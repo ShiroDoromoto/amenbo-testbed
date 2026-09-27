@@ -3,10 +3,11 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, expect, test } from 'vitest';
 import { deleteDB } from 'idb';
+import { ToastProvider } from '../../components/Toast/index.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { addAccount, deleteAccount } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
-import { addTransaction } from '../../db/repositories/transactions.ts';
+import { addTransaction, listTransactions } from '../../db/repositories/transactions.ts';
 import { TransactionList } from './TransactionList.tsx';
 
 const testDbName = 'kakeibo-transaction-list-test';
@@ -30,7 +31,12 @@ async function waitFor<T>(
 }
 
 function renderPage(today = '2026-09-28') {
-  render(<TransactionList dbName={testDbName} today={today} />, document.body);
+  render(
+    <ToastProvider>
+      <TransactionList dbName={testDbName} today={today} />
+    </ToastProvider>,
+    document.body,
+  );
 }
 
 function monthLabel() {
@@ -879,4 +885,118 @@ test('URL のクエリの月や収支区分が読めなければ、今月・す�
   await waitFor(() => monthLabel() === '2026年9月');
   expect(await days()).toHaveLength(3);
   expect(window.location.hash).toBe('#/transactions');
+});
+
+async function storedIds() {
+  const db = await openKakeiboDB(testDbName);
+  const ids = (await listTransactions(db)).map((t) => t.id).sort();
+  db.close();
+  return ids;
+}
+
+function checkboxes() {
+  return [
+    ...document.querySelectorAll<HTMLInputElement>('.transaction-list input[type="checkbox"]'),
+  ];
+}
+
+function selectedCount() {
+  return document.querySelector('.transaction-select-count')?.textContent;
+}
+
+test('「選択」を押すと、取引をリンクでなくチェックボックスにし、「やめる」でリンクに戻す', async () => {
+  await setup();
+  renderPage();
+  await rows();
+
+  await clickButton('選択');
+  expect(checkboxes()).toHaveLength(3);
+  expect(document.querySelectorAll('.transaction-list a')).toHaveLength(0);
+  expect(selectedCount()).toBe('0件を選択中');
+
+  await clickButton('やめる');
+  expect(checkboxes()).toHaveLength(0);
+  expect(await rows()).toHaveLength(3);
+});
+
+test('選んだ取引を、確認ダイアログで確かめてからまとめて削除する', async () => {
+  const { lunch, salary, withdrawal } = await setup();
+  renderPage();
+  await rows();
+  await clickButton('選択');
+  const deleteButton = [...document.querySelectorAll('button')].find(
+    (b) => b.textContent === '削除',
+  )!;
+  expect(deleteButton.disabled).toBe(true);
+
+  // 日付の新しい順なので、給与・ランチ・振替の順に並ぶ。
+  await act(() => checkboxes()[0]!.click());
+  await act(() => checkboxes()[1]!.click());
+  expect(selectedCount()).toBe('2件を選択中');
+
+  await clickButton('削除');
+  expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+    '2件の取引を削除しますか？',
+  );
+  await clickButton('削除する');
+
+  await waitFor(() => document.body.textContent?.includes('2件の取引を削除しました'));
+  expect(await storedIds()).toEqual([withdrawal.id]);
+  const links = await waitFor(async () => {
+    const found = await rows();
+    return found.length === 1 ? found : null;
+  });
+  expect(links[0]!.getAttribute('href')).toBe(`#/transactions/${withdrawal.id}`);
+  expect(checkboxes()).toHaveLength(0);
+
+  await clickButton('元に戻す');
+  await waitFor(async () => (await rows()).length === 3);
+  expect(await storedIds()).toEqual([lunch.id, salary.id, withdrawal.id].sort());
+});
+
+test('確認ダイアログでキャンセルすると、何も消さずに選んだままにする', async () => {
+  await setup();
+  renderPage();
+  await rows();
+  await clickButton('選択');
+  await act(() => checkboxes()[0]!.click());
+  await clickButton('削除');
+  await clickButton('キャンセル');
+
+  expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(await storedIds()).toHaveLength(3);
+  expect(selectedCount()).toBe('1件を選択中');
+});
+
+test('「すべて選択」は一覧に出ている取引だけを選び、絞り込みで隠れた取引は消さない', async () => {
+  const { lunch, salary, withdrawal } = await setup();
+  renderPage();
+  await rows();
+  const memo = document.querySelector<HTMLInputElement>('#transaction-filter-memo')!;
+  await act(() => {
+    memo.value = 'ランチ';
+    memo.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await waitFor(async () => (await rows()).length === 1);
+
+  await clickButton('選択');
+  await clickButton('すべて選択');
+  expect(selectedCount()).toBe('1件を選択中');
+  expect([...document.querySelectorAll('button')].some((b) => b.textContent === 'すべて外す')).toBe(
+    true,
+  );
+  await clickButton('削除');
+  await clickButton('削除する');
+
+  await waitFor(() => document.body.textContent?.includes('1件の取引を削除しました'));
+  expect(await storedIds()).toEqual([salary.id, withdrawal.id].sort());
+  expect(await storedIds()).not.toContain(lunch.id);
+});
+
+test('取引が無い月では「選択」を出さない', async () => {
+  renderPage();
+  await emptyMessage();
+  expect([...document.querySelectorAll('button')].some((b) => b.textContent === '選択')).toBe(
+    false,
+  );
 });
