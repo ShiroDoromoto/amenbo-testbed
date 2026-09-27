@@ -1,11 +1,18 @@
 import type { KakeiboDBConnection } from '../index.ts';
 import type { Account } from '../../domain/account.ts';
 
-export type NewAccount = Omit<Account, 'id'>;
+/** 追加する口座。締め日と引き落とし日は省けて、省くと `null`（決めていない）になる。 */
+export type NewAccount = Omit<Account, 'id' | 'closingDay' | 'paymentDay'> &
+  Partial<Pick<Account, 'closingDay' | 'paymentDay'>>;
 
 /** 口座を追加し、id を振って返す。 */
 export async function addAccount(db: KakeiboDBConnection, input: NewAccount): Promise<Account> {
-  const account: Account = { ...input, id: crypto.randomUUID() };
+  const account: Account = {
+    closingDay: null,
+    paymentDay: null,
+    ...input,
+    id: crypto.randomUUID(),
+  };
   await db.add('accounts', account);
   return account;
 }

@@ -12,8 +12,8 @@ const categories: Category[] = [
 ];
 
 const accounts: Account[] = [
-  { id: 'cash', name: '現金', type: 'cash', initialBalance: 0 },
-  { id: 'bank', name: '銀行', type: 'bank', initialBalance: 0 },
+  { id: 'cash', name: '現金', type: 'cash', initialBalance: 0, closingDay: null, paymentDay: null },
+  { id: 'bank', name: '銀行', type: 'bank', initialBalance: 0, closingDay: null, paymentDay: null },
 ];
 
 afterEach(() => {
