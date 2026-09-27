@@ -1,6 +1,10 @@
 import type { KakeiboDBConnection } from '../index.ts';
+import type { DateString } from '../../lib/date.ts';
+import type { Transaction } from '../../domain/transaction.ts';
 import {
+  dueOccurrences,
   isDayOfMonth,
+  transactionFor,
   type IncomeExpenseRecurringTransaction,
   type RecurringTransaction,
   type TransferRecurringTransaction,
@@ -68,4 +72,34 @@ export async function listRecurringTransactions(
 ): Promise<RecurringTransaction[]> {
   const recurrings = await db.getAll('recurringTransactions');
   return recurrings.sort((a, b) => a.dayOfMonth - b.dayOfMonth);
+}
+
+/**
+ * 定期取引のうち `today` までに起こすべき回の取引を作り、作った取引を日付の古い順に返す。
+ * 取引の追加と `lastGeneratedOn` の書き換えは1つのトランザクションで行う。途中で失敗すれば何も残さず、同じ回を二度作らない。
+ */
+export async function generateDueTransactions(
+  db: KakeiboDBConnection,
+  today: DateString,
+): Promise<Transaction[]> {
+  const tx = db.transaction(['recurringTransactions', 'transactions'], 'readwrite');
+  const recurringStore = tx.objectStore('recurringTransactions');
+  const transactionStore = tx.objectStore('transactions');
+  const created: Transaction[] = [];
+  for (const recurring of await recurringStore.getAll()) {
+    const dates = dueOccurrences(recurring, today);
+    const lastDate = dates.at(-1);
+    if (lastDate === undefined) continue;
+    for (const date of dates) {
+      const transaction: Transaction = {
+        ...transactionFor(recurring, date),
+        id: crypto.randomUUID(),
+      };
+      await transactionStore.add(transaction);
+      created.push(transaction);
+    }
+    await recurringStore.put({ ...recurring, lastGeneratedOn: lastDate });
+  }
+  await tx.done;
+  return created.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
