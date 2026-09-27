@@ -43,12 +43,19 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
   const [submitted, setSubmitted] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const id = useId();
+  const typeCategories = categories.filter((c) => c.type === type);
 
   const validation = validateTransactionInput(input);
   const errors: TransactionInputErrors = submitted && !validation.ok ? validation.errors : {};
 
   function update(field: TransactionInputField, value: string) {
     setInput((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function changeType(value: IncomeExpenseType) {
+    setType(value);
+    // カテゴリはどちらか一方の収支区分に属するので、区分を変えたら選び直してもらう。
+    update('categoryId', '');
   }
 
   async function handleSubmit(event: Event) {
@@ -107,7 +114,7 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
               name="type"
               value={value}
               checked={type === value}
-              onChange={() => setType(value)}
+              onChange={() => changeType(value)}
             />
             {typeLabels[value]}
           </label>
@@ -147,7 +154,7 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
           onChange={(e) => update('categoryId', e.currentTarget.value)}
         >
           <option value="">選んでください</option>
-          {categories.map((c) => (
+          {typeCategories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>

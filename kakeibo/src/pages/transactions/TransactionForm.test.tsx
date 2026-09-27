@@ -61,19 +61,44 @@ test('日付・収支・金額・カテゴリ・口座・メモの欄を出す',
   }
 });
 
-test('カテゴリと口座を選択肢に出す', () => {
+function optionLabels(select: HTMLSelectElement) {
+  return [...select.options].map((o) => o.textContent);
+}
+
+test('選んだ収支区分のカテゴリと、口座を選択肢に出す', () => {
   const { field } = renderForm();
-  const options = (name: string) =>
-    [...field<HTMLSelectElement>(name).options].map((o) => o.textContent);
-  expect(options('categoryId')).toEqual(['選んでください', '食費', '給与']);
-  expect(options('accountId')).toEqual(['現金', '銀行']);
+  expect(optionLabels(field('categoryId'))).toEqual(['選んでください', '食費']);
+  expect(optionLabels(field('accountId'))).toEqual(['現金', '銀行']);
+});
+
+test('収支区分を切り替えると、カテゴリの選択肢も切り替わり、選び直しになる', async () => {
+  const { form, field } = renderForm();
+  await act(() => choose(field('categoryId'), 'food'));
+  await act(() => form.querySelector<HTMLInputElement>('input[value="income"]')!.click());
+  expect(optionLabels(field('categoryId'))).toEqual(['選んでください', '給与']);
+  expect(field<HTMLSelectElement>('categoryId').value).toBe('');
+
+  await act(() => form.querySelector<HTMLInputElement>('input[value="expense"]')!.click());
+  expect(optionLabels(field('categoryId'))).toEqual(['選んでください', '食費']);
+  expect(field<HTMLSelectElement>('categoryId').value).toBe('');
+});
+
+test('収支区分を切り替えたあと、前の区分のカテゴリのままでは渡さない', async () => {
+  const { form, field, onSubmit } = renderForm();
+  await act(() => {
+    type(field('amount'), '500');
+    choose(field('categoryId'), 'food');
+  });
+  await act(() => form.querySelector<HTMLInputElement>('input[value="income"]')!.click());
+  await submit(form);
+  expect(onSubmit).not.toHaveBeenCalled();
 });
 
 test('入力した内容を取引にして渡す', async () => {
   const { form, field, onSubmit } = renderForm();
+  // 収入のカテゴリは、収支区分を収入にしてから選択肢に出る。
+  await act(() => form.querySelector<HTMLInputElement>('input[value="income"]')!.click());
   await act(() => {
-    const income = form.querySelector<HTMLInputElement>('input[value="income"]')!;
-    income.click();
     type(field('date'), '2026-09-01');
     type(field('amount'), '１,２３４円');
     choose(field('categoryId'), 'salary');
