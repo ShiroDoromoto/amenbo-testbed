@@ -24,6 +24,11 @@ import { filterTransactionsByAccount } from './filterTransactionsByAccount.ts';
 import { filterTransactionsByAmount } from './filterTransactionsByAmount.ts';
 import { filterTransactionsByMemo } from './filterTransactionsByMemo.ts';
 import { groupTransactionsByDate, type TransactionDay } from './groupTransactionsByDate.ts';
+import {
+  isTransactionSortOrder,
+  sortTransactions,
+  type TransactionSortOrder,
+} from './sortTransactions.ts';
 import './transactionList.css';
 
 type Loaded = {
@@ -76,6 +81,14 @@ const incomeExpenseLabels = [
   { type: 'income', label: '収入' },
 ] as const;
 
+/** 並び順の選択肢。 */
+const sortOrderLabels = [
+  { order: 'date-desc', label: '日付の新しい順' },
+  { order: 'date-asc', label: '日付の古い順' },
+  { order: 'amount-desc', label: '金額の大きい順' },
+  { order: 'amount-asc', label: '金額の小さい順' },
+] as const;
+
 /** 絞り込む収支区分。空文字はすべての区分。 */
 type TypeFilter = IncomeExpenseType | '';
 
@@ -115,7 +128,7 @@ function subtotalClass(subtotal: Yen): string {
 }
 
 /**
- * 取引の一覧画面。1か月分の取引を日付の新しい順に、日ごとにまとめて出す。
+ * 取引の一覧画面。1か月分の取引を、最初は日付の新しい順に、日ごとにまとめて出す。
  * 最初は今日の月を出し、前月・翌月のボタンで月を切り替える。
  * 口座を選ぶと、その口座が関わる取引だけに絞り込む。月を切り替えても絞り込みは保つ。
  * 日ごとに収支の小計を添え、取引を押すと編集画面を開く。
@@ -123,6 +136,8 @@ function subtotalClass(subtotal: Yen): string {
  * 収支区分を選ぶと、カテゴリの選択肢はその区分のものだけにする。
  * メモの検索欄にキーワードを入れると、メモにそのキーワードを含む取引だけを出す。月を切り替えてもキーワードは残す。
  * 金額の下限・上限を入れると、その範囲（両端を含む）の取引だけを出す。整数に直せない入力は、その端を絞り込まない。
+ * 並び順で、日付の古い順や金額の順に並べ替える。金額の順では日ごとにまとめず、取引ごとに日付を添える。
+ * 選んだ並び順は、月を切り替えても残す。
  */
 export function TransactionList({ dbName, today }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(today ?? toDateString(new Date())));
@@ -135,6 +150,7 @@ export function TransactionList({ dbName, today }: Props) {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('');
   /** メモを検索するキーワード。空文字は検索しない。 */
   const [keyword, setKeyword] = useState('');
+  const [sortOrder, setSortOrder] = useState<TransactionSortOrder>('date-desc');
   /** 金額の下限と上限の入力。空文字はその端を絞り込まない。 */
   const [minAmountInput, setMinAmountInput] = useState('');
   const [maxAmountInput, setMaxAmountInput] = useState('');
@@ -154,8 +170,7 @@ export function TransactionList({ dbName, today }: Props) {
       if (cancelled) return;
       setLoaded({
         month,
-        // 古い順に返るので、新しい順に並べ直す。
-        transactions: transactions.reverse(),
+        transactions,
         categories,
         categoryNames: namesById(categories),
         accounts,
@@ -168,7 +183,12 @@ export function TransactionList({ dbName, today }: Props) {
     };
   }, [dbName, month]);
 
-  function row(transaction: Transaction, { categoryNames, accountNames }: Loaded) {
+  /** `withDate` を立てると、口座の前に日付を添える。日ごとにまとめないときに使う。 */
+  function row(
+    transaction: Transaction,
+    { categoryNames, accountNames }: Loaded,
+    withDate = false,
+  ) {
     const accountName = (id: string) => accountNames.get(id) ?? missingName;
     const title = isTransfer(transaction)
       ? '振替'
@@ -184,6 +204,14 @@ export function TransactionList({ dbName, today }: Props) {
             {signedAmount(transaction)}
           </span>
           <span class="transaction-list-detail">
+            {withDate && (
+              <>
+                <time class="transaction-list-date" dateTime={transaction.date}>
+                  {transaction.date}
+                </time>
+                {' ・ '}
+              </>
+            )}
             {account}
             {transaction.memo !== '' && ` ・ ${transaction.memo}`}
           </span>
@@ -282,17 +310,36 @@ export function TransactionList({ dbName, today }: Props) {
     return incomeExpenseLabels.find((g) => g.type === typeFilter)!.label;
   }
 
-  function memoSearch() {
+  function searchAndSort() {
     return (
       <div class="transaction-filter">
-        <label for="transaction-filter-memo">メモ</label>
-        <input
-          id="transaction-filter-memo"
-          type="search"
-          placeholder="キーワードで検索"
-          value={keyword}
-          onInput={(e) => setKeyword(e.currentTarget.value)}
-        />
+        <div class="transaction-filter-field">
+          <label for="transaction-filter-memo">メモ</label>
+          <input
+            id="transaction-filter-memo"
+            type="search"
+            placeholder="キーワードで検索"
+            value={keyword}
+            onInput={(e) => setKeyword(e.currentTarget.value)}
+          />
+        </div>
+        <div class="transaction-filter-field">
+          <label for="transaction-sort">並び順</label>
+          <select
+            id="transaction-sort"
+            value={sortOrder}
+            onChange={(e) => {
+              const value = e.currentTarget.value;
+              if (isTransactionSortOrder(value)) setSortOrder(value);
+            }}
+          >
+            {sortOrderLabels.map(({ order, label }) => (
+              <option key={order} value={order}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     );
   }
@@ -359,9 +406,18 @@ export function TransactionList({ dbName, today }: Props) {
         </p>
       );
     }
+    const sorted = sortTransactions(transactions, sortOrder);
+    // 金額の順では、同じ日の取引が離れるので、日ごとにまとめない。
+    if (sortOrder === 'amount-desc' || sortOrder === 'amount-asc') {
+      return (
+        <div class="transaction-list">
+          <ul class="transaction-day-items">{sorted.map((t) => row(t, loaded, true))}</ul>
+        </div>
+      );
+    }
     return (
       <div class="transaction-list">
-        {groupTransactionsByDate(transactions).map((d) => day(d, loaded))}
+        {groupTransactionsByDate(sorted).map((d) => day(d, loaded))}
       </div>
     );
   }
@@ -381,7 +437,7 @@ export function TransactionList({ dbName, today }: Props) {
         </button>
       </nav>
       {loaded && filters(loaded.accounts, loaded.categories)}
-      {loaded && memoSearch()}
+      {loaded && searchAndSort()}
       {loaded && amountRange()}
       {body()}
     </>

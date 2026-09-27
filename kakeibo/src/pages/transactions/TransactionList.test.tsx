@@ -605,6 +605,116 @@ test('メモのキーワードは、月を切り替えても残す', async () =>
   );
 });
 
+async function selectSortOrder(label: string) {
+  const select = await waitFor(() =>
+    document.querySelector<HTMLSelectElement>('#transaction-sort'),
+  );
+  const option = [...select.options].find((o) => o.textContent === label)!;
+  await act(() => {
+    select.value = option.value;
+    select.dispatchEvent(new Event('change'));
+  });
+}
+
+test('並び順の選択肢は日付の新しい順・古い順、金額の大きい順・小さい順で、最初は日付の新しい順', async () => {
+  await setup();
+  renderPage();
+  const select = await waitFor(() =>
+    document.querySelector<HTMLSelectElement>('#transaction-sort'),
+  );
+
+  expect([...select.options].map((o) => o.textContent)).toEqual([
+    '日付の新しい順',
+    '日付の古い順',
+    '金額の大きい順',
+    '金額の小さい順',
+  ]);
+  expect(select.selectedOptions[0]!.textContent).toBe('日付の新しい順');
+});
+
+test('日付の古い順を選ぶと、日ごとのまとまりを古い順に並べる', async () => {
+  await setup();
+  renderPage();
+  await days();
+
+  await selectSortOrder('日付の古い順');
+  await waitFor(async () => (await days())[0]!.date === '2026-09-01');
+  expect((await days()).map((d) => d.date)).toEqual(['2026-09-01', '2026-09-10', '2026-09-25']);
+});
+
+test('金額の順を選ぶと、日ごとにまとめずに金額の順に並べ、取引ごとに日付を添える', async () => {
+  const { lunch, salary, withdrawal } = await setup();
+  renderPage();
+  await days();
+
+  await selectSortOrder('金額の大きい順');
+  await waitFor(() => document.querySelector('.transaction-list-date'));
+  expect(document.querySelector('.transaction-day')).toBeNull();
+  const found = await rows();
+  expect(found.map((a) => a.getAttribute('href'))).toEqual([
+    `#/transactions/${salary.id}`,
+    `#/transactions/${withdrawal.id}`,
+    `#/transactions/${lunch.id}`,
+  ]);
+  expect(text(found[2]!, 'detail')).toBe('2026-09-10 ・ 現金 ・ ランチ');
+
+  await selectSortOrder('金額の小さい順');
+  await waitFor(
+    async () => (await rows())[0]!.getAttribute('href') === `#/transactions/${lunch.id}`,
+  );
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
+    `#/transactions/${lunch.id}`,
+    `#/transactions/${withdrawal.id}`,
+    `#/transactions/${salary.id}`,
+  ]);
+});
+
+test('並び順は、絞り込みと組み合わせても、月を切り替えても残す', async () => {
+  const { expense, cash, lunch } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  const big = await addTransaction(db, {
+    date: '2026-10-05',
+    amount: 5000,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: 'ランチ会',
+  });
+  const small = await addTransaction(db, {
+    date: '2026-10-20',
+    amount: 300,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: 'ランチ',
+  });
+  await addTransaction(db, {
+    date: '2026-10-21',
+    amount: 100,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: '文房具',
+  });
+  db.close();
+  renderPage();
+  await days();
+
+  await selectSortOrder('金額の大きい順');
+  await searchMemo('ランチ');
+  await waitFor(async () => (await rows()).length === 1);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([`#/transactions/${lunch.id}`]);
+
+  await clickButton('翌月');
+  await waitFor(() => monthLabel() === '2026年10月');
+  await waitFor(async () => (await rows()).length === 2);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
+    `#/transactions/${big.id}`,
+    `#/transactions/${small.id}`,
+  ]);
+  expect(document.querySelector('.transaction-day')).toBeNull();
+});
+
 async function enterAmount(name: '金額の下限' | '金額の上限', value: string) {
   const input = await waitFor(() =>
     document.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`),

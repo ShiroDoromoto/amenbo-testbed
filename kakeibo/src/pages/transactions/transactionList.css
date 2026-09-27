@@ -29,7 +29,7 @@
   white-space: nowrap;
 }
 
-/* 口座・収支区分・カテゴリの選択を横に並べ、幅が足りなければ折り返す */
+/* 絞り込み・検索・並び順の欄を横に並べ、幅が足りなければ折り返す */
 .transaction-filter {
   display: flex;
   flex-wrap: wrap;
@@ -171,4 +171,10 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
+}
+
+/* 金額の順に並べたときに、取引ごとに添える日付 */
+.transaction-list-date {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
