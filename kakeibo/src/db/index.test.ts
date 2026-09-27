@@ -67,7 +67,13 @@ describe('openKakeiboDB', () => {
 
   it('keeps data when reopened', async () => {
     db = await openKakeiboDB(testDbName);
-    await db.put('categories', { id: 'c', name: '食費', type: 'expense', color: '#ff0000', order: 0 });
+    await db.put('categories', {
+      id: 'c',
+      name: '食費',
+      type: 'expense',
+      color: '#ff0000',
+      order: 0,
+    });
     db.close();
 
     db = await openKakeiboDB(testDbName);
