@@ -3,6 +3,7 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, expect, test } from 'vitest';
 import { deleteDB } from 'idb';
+import { ToastProvider } from '../../components/Toast/index.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { addAccount } from '../../db/repositories/accounts.ts';
 import { listTransactionsByDateRange } from '../../db/repositories/transactions.ts';
@@ -32,7 +33,12 @@ test('入力した取引を DB に足す', async () => {
   const account = await addAccount(setup, { name: '現金', type: 'cash', initialBalance: 0 });
   setup.close();
 
-  render(<NewTransactionPage dbName={testDbName} />, document.body);
+  render(
+    <ToastProvider>
+      <NewTransactionPage dbName={testDbName} />
+    </ToastProvider>,
+    document.body,
+  );
   const form = await waitFor(() => document.querySelector('form'));
   const field = <T extends HTMLElement>(name: string) => form.querySelector<T>(`[name="${name}"]`)!;
 

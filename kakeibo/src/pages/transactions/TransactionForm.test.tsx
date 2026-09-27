@@ -1,6 +1,7 @@
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, expect, test, vi } from 'vitest';
+import { ToastProvider } from '../../components/Toast/index.ts';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
 import { TransactionForm } from './TransactionForm.tsx';
@@ -16,6 +17,7 @@ const accounts: Account[] = [
 ];
 
 afterEach(() => {
+  render(null, document.body.firstElementChild!);
   document.body.innerHTML = '';
 });
 
@@ -23,12 +25,14 @@ function renderForm(onSubmit = vi.fn(), accountList: Account[] = accounts) {
   const root = document.createElement('div');
   document.body.append(root);
   render(
-    <TransactionForm
-      categories={categories}
-      accounts={accountList}
-      initialDate="2026-09-28"
-      onSubmit={onSubmit}
-    />,
+    <ToastProvider>
+      <TransactionForm
+        categories={categories}
+        accounts={accountList}
+        initialDate="2026-09-28"
+        onSubmit={onSubmit}
+      />
+    </ToastProvider>,
     root,
   );
   const form = root.querySelector('form')!;
@@ -209,4 +213,44 @@ test('保存を押すまでは、エラーを出さない', async () => {
     type(field('amount'), 'abc');
   });
   expect(form.querySelector('.transaction-form-error')).toBeNull();
+});
+
+async function fillValid(form: HTMLFormElement, field: <T extends HTMLElement>(name: string) => T) {
+  // 収支を変えるとカテゴリの選択肢が描き直されるので、先に切り替えておく。
+  await act(() => {
+    form.querySelector<HTMLInputElement>('input[value="income"]')!.click();
+  });
+  await act(() => {
+    type(field('date'), '2026-09-01');
+    type(field('amount'), '500');
+    choose(field('categoryId'), 'salary');
+    choose(field('accountId'), 'bank');
+    type(field('memo'), '9月分');
+  });
+}
+
+test('保存できたら、フォームを初めの状態に戻し、トーストで知らせる', async () => {
+  const { form, field, onSubmit } = renderForm();
+  await fillValid(form, field);
+  await submit(form);
+  expect(onSubmit).toHaveBeenCalledOnce();
+  expect(field<HTMLInputElement>('date').value).toBe('2026-09-28');
+  expect(form.querySelector<HTMLInputElement>('input[value="expense"]')!.checked).toBe(true);
+  expect(field<HTMLInputElement>('amount').value).toBe('');
+  expect(field<HTMLSelectElement>('categoryId').value).toBe('');
+  expect(field<HTMLSelectElement>('accountId').value).toBe('cash');
+  expect(field<HTMLInputElement>('memo').value).toBe('');
+  expect(form.querySelector('.transaction-form-error')).toBeNull();
+  expect(document.querySelector('[role="status"]')?.textContent).toContain('保存しました');
+});
+
+test('保存できなかったら、入力を残し、エラーのトーストを出す', async () => {
+  const onSubmit = vi.fn().mockRejectedValue(new Error('書けない'));
+  const { form, field } = renderForm(onSubmit);
+  await fillValid(form, field);
+  await submit(form);
+  expect(field<HTMLInputElement>('amount').value).toBe('500');
+  expect(field<HTMLInputElement>('memo').value).toBe('9月分');
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('保存できませんでした');
+  expect(document.querySelector('[role="status"]')).toBeNull();
 });
