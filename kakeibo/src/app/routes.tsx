@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { pathFromHash, type Route } from '../router/index.ts';
+import { CategoryList } from '../pages/categories/CategoryList.tsx';
 import { EditRecurringPage } from '../pages/recurring/EditRecurringPage.tsx';
 import { NewRecurringPage } from '../pages/recurring/NewRecurringPage.tsx';
 import { RecurringList } from '../pages/recurring/RecurringList.tsx';
@@ -12,6 +13,7 @@ const pages: Readonly<Record<string, () => ComponentChildren>> = {
   '/transactions': () => <TransactionList />,
   '/transactions/new': () => <NewTransactionPage />,
   '/recurring': () => <RecurringList />,
+  '/categories': () => <CategoryList />,
 };
 
 // 画面がまだ無い項目は、見出しだけを出す。

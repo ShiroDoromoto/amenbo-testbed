@@ -1,0 +1,113 @@
+.category-add-form {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 32rem;
+  margin-bottom: var(--space-5);
+}
+
+.category-add-type {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+}
+
+.category-add-name {
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* 名前の入力欄とボタンを横に並べ、狭い幅では折り返す */
+.category-name-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.category-name-control input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding: var(--space-2);
+  font: inherit;
+  color: inherit;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+}
+
+.category-name-control [aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.category-error {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-danger);
+}
+
+.category-primary-button,
+.category-secondary-button {
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  cursor: pointer;
+}
+
+.category-primary-button {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border: 1px solid var(--color-primary);
+}
+
+.category-secondary-button {
+  color: inherit;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+}
+
+.category-primary-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.category-list-section h3 {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--font-size-md);
+}
+
+.category-list {
+  max-width: 40rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.category-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.category-swatch {
+  flex: none;
+  width: var(--space-4);
+  height: var(--space-4);
+  border-radius: 50%;
+}
+
+.category-list-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.category-rename-form {
+  display: grid;
+  flex: 1;
+  gap: var(--space-1);
+  min-width: 0;
+}
