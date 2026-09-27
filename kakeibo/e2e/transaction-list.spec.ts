@@ -190,7 +190,7 @@ test('並び順を選ぶと、金額や日付の順に並べ替わる', async ({
   await expect(links.first()).toHaveAttribute('href', '#/transactions/e2e-dinner');
 });
 
-test('スマホ幅でも、取引の一覧と月の切り替え、口座・収支区分・カテゴリの絞り込み、メモの検索、並び順が横にはみ出さない', async ({
+test('スマホ幅でも、取引の一覧と月の切り替え、口座・収支区分・カテゴリの絞り込み、メモの検索、金額の範囲、並び順が横にはみ出さない', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 667 });
@@ -202,6 +202,8 @@ test('スマホ幅でも、取引の一覧と月の切り替え、口座・収�
   await expect(page.getByRole('main').getByLabel('収支区分')).toBeInViewport();
   await expect(page.getByRole('main').getByLabel('カテゴリ')).toBeInViewport();
   await expect(page.getByRole('main').getByLabel('メモ')).toBeInViewport();
+  await expect(page.getByRole('main').getByLabel('金額の下限')).toBeInViewport();
+  await expect(page.getByRole('main').getByLabel('金額の上限')).toBeInViewport();
   await expect(page.getByRole('main').getByLabel('並び順')).toBeInViewport();
   await page.getByRole('main').getByLabel('並び順').selectOption({ label: '金額の大きい順' });
   await expect(page.getByRole('main').locator('.transaction-list-date')).toHaveCount(2);
