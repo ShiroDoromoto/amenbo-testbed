@@ -5,6 +5,7 @@ import { openKakeiboDB, type KakeiboDBConnection } from '../index.ts';
 import type { IncomeExpenseTransaction, TransferTransaction } from '../../domain/transaction.ts';
 import {
   addTransaction,
+  countTransactionsByCategory,
   deleteTransaction,
   getTransaction,
   listTransactionsByDateRange,
@@ -161,5 +162,20 @@ describe('listTransactionsByDateRange', () => {
   it('returns nothing when from is after to', async () => {
     await addTransaction(db, newTransaction({ date: '2026-01-15' }));
     expect(await listTransactionsByDateRange(db, '2026-01-31', '2026-01-01')).toEqual([]);
+  });
+});
+
+describe('countTransactionsByCategory', () => {
+  it('counts the transactions that use the category', async () => {
+    await addTransaction(db, newTransaction({ categoryId: 'food' }));
+    await addTransaction(db, newTransaction({ categoryId: 'food' }));
+    await addTransaction(db, newTransaction({ categoryId: 'transport' }));
+    await addTransaction(db, newTransfer());
+    expect(await countTransactionsByCategory(db, 'food')).toBe(2);
+    expect(await countTransactionsByCategory(db, 'transport')).toBe(1);
+  });
+
+  it('returns 0 when no transaction uses the category', async () => {
+    expect(await countTransactionsByCategory(db, 'missing')).toBe(0);
   });
 });
