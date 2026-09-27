@@ -42,7 +42,8 @@
   white-space: nowrap;
 }
 
-.transaction-filter select {
+.transaction-filter select,
+.transaction-filter input {
   flex: 1;
   min-width: 0;
   padding: var(--space-2);

@@ -43,7 +43,7 @@ async function clickButton(name: string) {
 
 async function emptyMessage() {
   return waitFor(() =>
-    [...document.querySelectorAll('p')].find((p) => p.textContent?.includes('の取引はありません')),
+    [...document.querySelectorAll('p')].find((p) => p.textContent?.includes('取引はありません')),
   );
 }
 
@@ -415,5 +415,74 @@ test('口座とカテゴリを両方選ぶと、どちらにも当てはまる�
   await selectCategory(income.id);
   expect((await emptyMessage()).textContent).toMatch(
     /^2026年9月の現金の「.+」の取引はありません。$/,
+  );
+});
+
+async function searchMemo(keyword: string) {
+  const input = await waitFor(() =>
+    document.querySelector<HTMLInputElement>('#transaction-filter-memo'),
+  );
+  await act(() => {
+    input.value = keyword;
+    input.dispatchEvent(new Event('input'));
+  });
+}
+
+test('メモにキーワードを入れると、メモにそのキーワードを含む取引だけを出す', async () => {
+  const { lunch } = await setup();
+  renderPage();
+  await days();
+
+  await searchMemo('ランチ');
+  await waitFor(async () => (await rows()).length === 1);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([`#/transactions/${lunch.id}`]);
+
+  await searchMemo('');
+  await waitFor(async () => (await rows()).length === 3);
+});
+
+test('メモにキーワードを含む取引が無ければ、キーワードを添えてその旨を出し、入力画面へのリンクは出さない', async () => {
+  await setup();
+  renderPage();
+  await days();
+
+  await searchMemo(' 家賃 ');
+  const message = await emptyMessage();
+  expect(message.textContent).toBe('2026年9月で、メモに「家賃」を含む取引はありません。');
+  expect(message.querySelector('a')).toBeNull();
+});
+
+test('メモのキーワードは、月を切り替えても残す', async () => {
+  const { expense, cash } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  const lateLunch = await addTransaction(db, {
+    date: '2026-10-05',
+    amount: 900,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: 'ランチ',
+  });
+  await addTransaction(db, {
+    date: '2026-10-06',
+    amount: 500,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: '文房具',
+  });
+  db.close();
+  renderPage();
+  await days();
+
+  await searchMemo('ランチ');
+  await clickButton('翌月');
+  await waitFor(() => monthLabel() === '2026年10月');
+  await waitFor(async () => (await rows()).length === 1);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
+    `#/transactions/${lateLunch.id}`,
+  ]);
+  expect(document.querySelector<HTMLInputElement>('#transaction-filter-memo')!.value).toBe(
+    'ランチ',
   );
 });
