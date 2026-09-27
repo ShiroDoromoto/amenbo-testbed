@@ -12,6 +12,8 @@ import {
 } from '../../db/repositories/categories.ts';
 import { listRecurringTransactions } from '../../db/repositories/recurring.ts';
 import { countTransactionsByCategory } from '../../db/repositories/transactions.ts';
+import { defaultCategoryColor } from './categoryColors.ts';
+import { ColorPicker } from './ColorPicker.tsx';
 import { DeleteCategoryDialog, type CategoryUsage } from './DeleteCategoryDialog.tsx';
 import { validateCategoryName } from './validateCategoryName.ts';
 import './categoryList.css';
@@ -23,9 +25,6 @@ const typeLabels: Record<IncomeExpenseType, string> = {
 
 // 区分の選択肢と一覧を並べる順。取引の入力フォームに合わせて、支出を先にする。
 const typeOrder: readonly IncomeExpenseType[] = ['expense', 'income'];
-
-/** 追加したカテゴリの色。色を選べるようになるまでは、この灰色にする。 */
-export const newCategoryColor = '#868e96';
 
 type Loaded = {
   db: KakeiboDBConnection;
@@ -49,7 +48,7 @@ function reassignCandidates(categories: readonly Category[], category: Category)
 }
 
 /**
- * カテゴリの管理画面。カテゴリを収支区分ごとに並び順で出し、追加・名前の変更・削除ができる。
+ * カテゴリの管理画面。カテゴリを収支区分ごとに並び順で出し、追加・名前と色の変更・削除ができる。
  * 使われているカテゴリを消すときは、取引と定期取引の付け替え先を選ばせる。
  * `ToastProvider` の中で使う。
  */
@@ -79,13 +78,13 @@ export function CategoryList({ dbName }: Props) {
   }
 
   /** 追加できたら `true` を返す。 */
-  async function add(type: IncomeExpenseType, name: string): Promise<boolean> {
+  async function add(type: IncomeExpenseType, name: string, color: string): Promise<boolean> {
     if (!loaded) return false;
     try {
       await addCategory(loaded.db, {
         name,
         type,
-        color: newCategoryColor,
+        color,
         order: nextOrder(loaded.categories, type),
       });
     } catch {
@@ -107,6 +106,20 @@ export function CategoryList({ dbName }: Props) {
       return false;
     }
     toast.show('名前を変えました', { kind: 'success' });
+    await reload(loaded.db);
+    return true;
+  }
+
+  /** 変えられたら `true` を返す。 */
+  async function recolor(category: Category, color: string): Promise<boolean> {
+    if (!loaded) return false;
+    try {
+      await updateCategory(loaded.db, { ...category, color });
+    } catch {
+      toast.show('色を変えられませんでした', { kind: 'error' });
+      return false;
+    }
+    toast.show('色を変えました', { kind: 'success' });
     await reload(loaded.db);
     return true;
   }
@@ -173,6 +186,7 @@ export function CategoryList({ dbName }: Props) {
                         category={category}
                         categories={loaded.categories}
                         onRename={rename}
+                        onRecolor={recolor}
                         onDelete={startDeleting}
                       />
                     ))}
@@ -200,13 +214,14 @@ export function CategoryList({ dbName }: Props) {
 
 type AddFormProps = {
   categories: readonly Category[];
-  onAdd: (type: IncomeExpenseType, name: string) => Promise<boolean>;
+  onAdd: (type: IncomeExpenseType, name: string, color: string) => Promise<boolean>;
 };
 
 /** カテゴリを1件足すフォーム。 */
 function AddCategoryForm({ categories, onAdd }: AddFormProps) {
   const [type, setType] = useState<IncomeExpenseType>('expense');
   const [name, setName] = useState('');
+  const [color, setColor] = useState(defaultCategoryColor);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const id = useId();
@@ -221,8 +236,9 @@ function AddCategoryForm({ categories, onAdd }: AddFormProps) {
     }
     setSaving(true);
     try {
-      if (await onAdd(type, result.name)) {
+      if (await onAdd(type, result.name, color)) {
         setName('');
+        setColor(defaultCategoryColor);
         setError(null);
       }
     } finally {
@@ -248,6 +264,7 @@ function AddCategoryForm({ categories, onAdd }: AddFormProps) {
           </label>
         ))}
       </fieldset>
+      <ColorPicker legend="色" value={color} onChange={setColor} />
       <div class="category-add-name">
         <label for={`${id}-name`}>新しいカテゴリの名前</label>
         <div class="category-name-control">
@@ -278,15 +295,17 @@ type RowProps = {
   category: Category;
   categories: readonly Category[];
   onRename: (category: Category, name: string) => Promise<boolean>;
+  onRecolor: (category: Category, color: string) => Promise<boolean>;
   onDelete: (category: Category) => void;
 };
 
 /**
  * カテゴリ1件の行。「名前を変える」を押すと、その場で名前の入力欄に変わる。
- * 「削除する」を押すと、削除の確認を出す。
+ * 「色を変える」を押すと、その場で色の選択肢に変わる。「削除する」を押すと、削除の確認を出す。
  */
-function CategoryRow({ category, categories, onRename, onDelete }: RowProps) {
+function CategoryRow({ category, categories, onRename, onRecolor, onDelete }: RowProps) {
   const [editing, setEditing] = useState(false);
+  const [recoloring, setRecoloring] = useState(false);
   const [name, setName] = useState(category.name);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -328,6 +347,15 @@ function CategoryRow({ category, categories, onRename, onDelete }: RowProps) {
     <span class="category-swatch" style={{ backgroundColor: category.color }} aria-hidden="true" />
   );
 
+  if (recoloring) {
+    return (
+      <li class="category-list-item">
+        {swatch}
+        <RecolorForm category={category} onSave={onRecolor} onClose={() => setRecoloring(false)} />
+      </li>
+    );
+  }
+
   if (!editing) {
     return (
       <li class="category-list-item">
@@ -340,6 +368,14 @@ function CategoryRow({ category, categories, onRename, onDelete }: RowProps) {
           onClick={startEditing}
         >
           名前を変える
+        </button>
+        <button
+          type="button"
+          class="category-secondary-button"
+          aria-label={`${category.name}の色を変える`}
+          onClick={() => setRecoloring(true)}
+        >
+          色を変える
         </button>
         <button
           type="button"
@@ -385,5 +421,62 @@ function CategoryRow({ category, categories, onRename, onDelete }: RowProps) {
         )}
       </form>
     </li>
+  );
+}
+
+type RecolorFormProps = {
+  category: Category;
+  onSave: (category: Category, color: string) => Promise<boolean>;
+  onClose: () => void;
+};
+
+/** 行の中で、カテゴリの色を選び直すフォーム。 */
+function RecolorForm({ category, onSave, onClose }: RecolorFormProps) {
+  const [color, setColor] = useState(category.color);
+  const [saving, setSaving] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // いまの色の選択肢に、すぐ矢印キーで動けるようにする。
+  useEffect(() => {
+    const form = formRef.current;
+    (
+      form?.querySelector<HTMLInputElement>('input:checked') ?? form?.querySelector('input')
+    )?.focus();
+  }, []);
+
+  async function handleSubmit(event: Event) {
+    event.preventDefault();
+    if (saving) return;
+    if (color === category.color) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    try {
+      if (await onSave(category, color)) onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      class="category-recolor-form"
+      ref={formRef}
+      onSubmit={handleSubmit}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose();
+      }}
+    >
+      <ColorPicker legend={`${category.name}の色`} value={color} onChange={setColor} />
+      <div class="category-name-control">
+        <button type="submit" class="category-primary-button" disabled={saving}>
+          保存する
+        </button>
+        <button type="button" class="category-secondary-button" onClick={onClose}>
+          キャンセル
+        </button>
+      </div>
+    </form>
   );
 }

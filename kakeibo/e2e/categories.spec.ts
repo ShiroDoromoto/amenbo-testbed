@@ -33,6 +33,45 @@ test('スマホ幅でも、名前を変えている行が横にはみ出さな�
   expect(overflow).toBe(0);
 });
 
+test('色を選んでカテゴリを足し、色を変える', async ({ page }) => {
+  await page.goto('/#/categories');
+  const main = page.getByRole('main');
+  await main.getByRole('radio', { name: '青', exact: true }).check();
+  await main.getByLabel('新しいカテゴリの名前').fill('書籍');
+  await main.getByRole('button', { name: '追加する' }).click();
+  const expense = main.getByRole('region', { name: '支出' });
+  const row = expense.getByRole('listitem').last();
+  await expect(row).toContainText('書籍');
+  await expect(row.locator('.category-swatch')).toHaveCSS('background-color', 'rgb(28, 126, 214)');
+
+  await expense.getByRole('button', { name: '書籍の色を変える' }).click();
+  await row.getByRole('radio', { name: '紫', exact: true }).check();
+  await row.getByRole('button', { name: '保存する' }).click();
+  await expect(row.locator('.category-swatch')).toHaveCSS('background-color', 'rgb(95, 61, 196)');
+
+  await page.reload();
+  await expect(
+    main
+      .getByRole('region', { name: '支出' })
+      .getByRole('listitem')
+      .last()
+      .locator('.category-swatch'),
+  ).toHaveCSS('background-color', 'rgb(95, 61, 196)');
+});
+
+test('スマホ幅でも、色を変えている行が横にはみ出さない', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto('/#/categories');
+  const main = page.getByRole('main');
+  await main.getByRole('button', { name: '水道光熱費の色を変える' }).click();
+  await expect(main.getByRole('group', { name: '水道光熱費の色' })).toBeVisible();
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(0);
+});
+
 test('使われているカテゴリを、付け替え先を選んで消す', async ({ page }) => {
   await page.goto('/#/categories');
   const main = page.getByRole('main');

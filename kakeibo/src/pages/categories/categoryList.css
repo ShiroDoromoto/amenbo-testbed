@@ -129,3 +129,56 @@
   background: var(--color-bg);
   border: 1px solid var(--color-border);
 }
+
+.category-recolor-form {
+  display: grid;
+  flex: 1;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.category-color-picker {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+}
+
+/* 色の見本を並べ、狭い幅では折り返す */
+.category-color-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.category-color-option {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+/* ラジオボタンは見本の下に重ねて隠し、選んだ状態とフォーカスは見本の枠で出す */
+.category-color-option input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.category-color-sample {
+  width: var(--space-6);
+  height: var(--space-6);
+  border: 2px solid var(--color-bg);
+  border-radius: 50%;
+  outline: 2px solid transparent;
+}
+
+.category-color-option input:checked + .category-color-sample {
+  outline-color: var(--color-text);
+}
+
+.category-color-option input:focus-visible + .category-color-sample {
+  outline-color: var(--color-primary);
+  outline-offset: 2px;
+}
