@@ -5,13 +5,22 @@ import { isTransfer, type Transaction } from '../../domain/transaction.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { listAccounts } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
-import { listTransactionsNewestFirst } from '../../db/repositories/transactions.ts';
+import { listTransactionsByDateRange } from '../../db/repositories/transactions.ts';
+import {
+  addMonths,
+  endOfMonth,
+  startOfMonth,
+  toDateString,
+  type DateString,
+} from '../../lib/date.ts';
 import { formatYen, type Yen } from '../../lib/money.ts';
 import { hashFromPath } from '../../router/index.ts';
 import { groupTransactionsByDate, type TransactionDay } from './groupTransactionsByDate.ts';
 import './transactionList.css';
 
 type Loaded = {
+  /** どの月を読んだか。月を切り替えた直後に、前の月の取引を出さないために持つ。 */
+  month: DateString;
   transactions: Transaction[];
   categoryNames: ReadonlyMap<string, string>;
   accountNames: ReadonlyMap<string, string>;
@@ -20,6 +29,8 @@ type Loaded = {
 type Props = {
   /** 開く DB の名前。テストで別の DB を使うときに渡す。 */
   dbName?: string;
+  /** 今日の日付。最初に今日の月を出す。テストで日付を決めるときに渡す。 */
+  today?: DateString;
 };
 
 // カテゴリや口座が消されていても、一覧は出す。
@@ -41,6 +52,12 @@ function signedSubtotal(subtotal: Yen): string {
   return subtotal > 0 ? `+${formatYen(subtotal)}` : formatYen(subtotal);
 }
 
+/** 月の見出し。例：`2026-09-01` → `2026年9月`。 */
+function monthLabel(month: DateString): string {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return `${year}年${monthNumber}月`;
+}
+
 function subtotalClass(subtotal: Yen): string {
   if (subtotal > 0) return 'transaction-day-subtotal transaction-day-subtotal-income';
   if (subtotal < 0) return 'transaction-day-subtotal transaction-day-subtotal-expense';
@@ -48,10 +65,12 @@ function subtotalClass(subtotal: Yen): string {
 }
 
 /**
- * 取引の一覧画面。すべての取引を日付の新しい順に、日ごとにまとめて出す。
+ * 取引の一覧画面。1か月分の取引を日付の新しい順に、日ごとにまとめて出す。
+ * 最初は今日の月を出し、前月・翌月のボタンで月を切り替える。
  * 日ごとに収支の小計を添え、取引を押すと編集画面を開く。
  */
-export function TransactionList({ dbName }: Props) {
+export function TransactionList({ dbName, today }: Props) {
+  const [month, setMonth] = useState(() => startOfMonth(today ?? toDateString(new Date())));
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
   useEffect(() => {
@@ -60,13 +79,15 @@ export function TransactionList({ dbName }: Props) {
     void (async () => {
       const db = await opening;
       const [transactions, categories, accounts] = await Promise.all([
-        listTransactionsNewestFirst(db),
+        listTransactionsByDateRange(db, month, endOfMonth(month)),
         listCategories(db),
         listAccounts(db),
       ]);
       if (cancelled) return;
       setLoaded({
-        transactions,
+        month,
+        // 古い順に返るので、新しい順に並べ直す。
+        transactions: transactions.reverse(),
         categoryNames: namesById(categories),
         accountNames: namesById(accounts),
       });
@@ -75,7 +96,7 @@ export function TransactionList({ dbName }: Props) {
       cancelled = true;
       void opening.then((db) => db.close());
     };
-  }, [dbName]);
+  }, [dbName, month]);
 
   function row(transaction: Transaction, { categoryNames, accountNames }: Loaded) {
     const accountName = (id: string) => accountNames.get(id) ?? missingName;
@@ -119,11 +140,11 @@ export function TransactionList({ dbName }: Props) {
   }
 
   function body() {
-    if (!loaded) return <p>読み込み中…</p>;
+    if (!loaded || loaded.month !== month) return <p>読み込み中…</p>;
     if (loaded.transactions.length === 0) {
       return (
         <p>
-          取引はまだありません。
+          {monthLabel(month)}の取引はありません。
           <a href={hashFromPath('/transactions/new')}>取引を入力する</a>
         </p>
       );
@@ -138,6 +159,17 @@ export function TransactionList({ dbName }: Props) {
   return (
     <>
       <h2>取引</h2>
+      <nav class="transaction-month" aria-label="表示する月">
+        <button type="button" onClick={() => setMonth(addMonths(month, -1))}>
+          前月
+        </button>
+        <span class="transaction-month-label" aria-live="polite">
+          {monthLabel(month)}
+        </span>
+        <button type="button" onClick={() => setMonth(addMonths(month, 1))}>
+          翌月
+        </button>
+      </nav>
       {body()}
     </>
   );

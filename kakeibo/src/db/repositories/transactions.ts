@@ -66,14 +66,3 @@ export async function listTransactionsByDateRange(
   if (from > to) return [];
   return db.getAllFromIndex('transactions', 'by-date', IDBKeyRange.bound(from, to));
 }
-
-/** すべての取引を、日付の新しい順に返す。同じ日付の中の順は決めない。 */
-export async function listTransactionsNewestFirst(db: KakeiboDBConnection): Promise<Transaction[]> {
-  const transactions: Transaction[] = [];
-  let cursor = await db.transaction('transactions').store.index('by-date').openCursor(null, 'prev');
-  while (cursor) {
-    transactions.push(cursor.value);
-    cursor = await cursor.continue();
-  }
-  return transactions;
-}

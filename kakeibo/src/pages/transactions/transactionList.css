@@ -1,3 +1,34 @@
+/* 月の見出しを真ん中に、前月・翌月のボタンを両脇に出す */
+.transaction-month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  max-width: 40rem;
+  margin-bottom: var(--space-4);
+}
+
+.transaction-month button {
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.transaction-month button:hover,
+.transaction-month button:focus-visible {
+  background: var(--color-hover);
+}
+
+.transaction-month-label {
+  font-size: var(--font-size-lg);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .transaction-list {
   max-width: 40rem;
 }

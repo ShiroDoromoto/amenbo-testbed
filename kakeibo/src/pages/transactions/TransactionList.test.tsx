@@ -28,8 +28,23 @@ async function waitFor<T>(
   throw new Error('待っても出てこなかった');
 }
 
-function renderPage() {
-  render(<TransactionList dbName={testDbName} />, document.body);
+function renderPage(today = '2026-09-28') {
+  render(<TransactionList dbName={testDbName} today={today} />, document.body);
+}
+
+function monthLabel() {
+  return document.querySelector('.transaction-month-label')?.textContent;
+}
+
+async function clickButton(name: string) {
+  const button = [...document.querySelectorAll('button')].find((b) => b.textContent === name)!;
+  await act(() => button.click());
+}
+
+async function emptyMessage() {
+  return waitFor(() =>
+    [...document.querySelectorAll('p')].find((p) => p.textContent?.includes('の取引はありません')),
+  );
 }
 
 async function rows() {
@@ -155,14 +170,73 @@ test('消された口座は「（削除済み）」と出す', async () => {
   expect(text(lunch!, 'detail')).toBe('（削除済み） ・ ランチ');
 });
 
-test('取引が無ければ、その旨と入力画面へのリンクを出す', async () => {
+test('その月に取引が無ければ、その旨と入力画面へのリンクを出す', async () => {
   renderPage();
-  const message = await waitFor(() =>
-    [...document.querySelectorAll('p')].find((p) =>
-      p.textContent?.includes('取引はまだありません'),
-    ),
-  );
+  const message = await emptyMessage();
 
+  expect(message.textContent).toContain('2026年9月の取引はありません');
   expect(message.querySelector('a')?.getAttribute('href')).toBe('#/transactions/new');
   expect(document.querySelector('.transaction-list')).toBeNull();
+});
+
+test('最初は今日の月の取引だけを出す', async () => {
+  const { cash, expense, lunch } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  for (const date of ['2026-08-31', '2026-10-01']) {
+    await addTransaction(db, {
+      date,
+      amount: 100,
+      type: 'expense',
+      categoryId: expense.id,
+      accountId: cash.id,
+      memo: '',
+    });
+  }
+  db.close();
+  renderPage('2026-09-15');
+
+  expect(monthLabel()).toBe('2026年9月');
+  expect((await days()).map((d) => d.date)).toEqual(['2026-09-25', '2026-09-10', '2026-09-01']);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toContain(`#/transactions/${lunch.id}`);
+});
+
+test('前月・翌月のボタンで、表示する月を切り替える', async () => {
+  const { cash, expense } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  const august = await addTransaction(db, {
+    date: '2026-08-31',
+    amount: 100,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: '',
+  });
+  db.close();
+  renderPage();
+  await days();
+
+  await clickButton('前月');
+  expect(monthLabel()).toBe('2026年8月');
+  await waitFor(async () => (await days()).length === 1);
+  expect((await days())[0]!.links).toEqual([`#/transactions/${august.id}`]);
+
+  await clickButton('翌月');
+  await clickButton('翌月');
+  expect(monthLabel()).toBe('2026年10月');
+  expect((await emptyMessage()).textContent).toContain('2026年10月の取引はありません');
+
+  await clickButton('前月');
+  expect(monthLabel()).toBe('2026年9月');
+  expect(await days()).toHaveLength(3);
+});
+
+test('年をまたいで月を切り替える', async () => {
+  renderPage('2026-01-31');
+  await emptyMessage();
+
+  await clickButton('前月');
+  expect(monthLabel()).toBe('2025年12月');
+  await clickButton('翌月');
+  await clickButton('翌月');
+  expect(monthLabel()).toBe('2026年2月');
 });
