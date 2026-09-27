@@ -1,0 +1,89 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    'header header'
+    'nav main';
+  min-height: 100vh;
+}
+
+.layout-header {
+  grid-area: header;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.layout-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.layout-nav {
+  grid-area: nav;
+  padding: 1rem 0;
+  border-right: 1px solid #ddd;
+}
+
+.layout-nav-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.layout-nav-link {
+  display: block;
+  padding: 0.5rem 1rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.layout-nav-link:hover,
+.layout-nav-link:focus-visible {
+  background: #f0f0f0;
+}
+
+.layout-main {
+  grid-area: main;
+  min-width: 0;
+  padding: 1rem;
+}
+
+/* スマホ幅では、ナビをヘッダーの下に横並びで置く */
+@media (max-width: 640px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      'header'
+      'nav'
+      'main';
+  }
+
+  .layout-nav {
+    padding: 0;
+    border-right: none;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .layout-nav-list {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .layout-nav-link {
+    white-space: nowrap;
+  }
+}
