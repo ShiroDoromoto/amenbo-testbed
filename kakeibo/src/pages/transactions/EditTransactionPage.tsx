@@ -10,6 +10,7 @@ import { listCategories } from '../../db/repositories/categories.ts';
 import {
   deleteTransaction,
   getTransaction,
+  listRecentMemos,
   restoreTransaction,
   updateTransaction,
   type NewTransaction,
@@ -23,6 +24,7 @@ type Loaded = {
   categories: Category[];
   accounts: Account[];
   transaction: Transaction | undefined;
+  memos: string[];
 };
 
 type Props = {
@@ -52,12 +54,13 @@ export function EditTransactionPage({ id, dbName }: Props) {
     let cancelled = false;
     void (async () => {
       const db = await opening;
-      const [categories, accounts, transaction] = await Promise.all([
+      const [categories, accounts, transaction, memos] = await Promise.all([
         listCategories(db),
         listAccounts(db),
         getTransaction(db, id),
+        listRecentMemos(db),
       ]);
-      if (!cancelled) setLoaded({ db, categories, accounts, transaction });
+      if (!cancelled) setLoaded({ db, categories, accounts, transaction, memos });
     })();
     return () => {
       cancelled = true;
@@ -107,12 +110,13 @@ export function EditTransactionPage({ id, dbName }: Props) {
     navigate('/transactions');
   }
 
-  function form({ categories, accounts }: Loaded, transaction: Transaction) {
+  function form({ categories, accounts, memos }: Loaded, transaction: Transaction) {
     return (
       <TransactionForm
         categories={categories}
         accounts={accounts}
         defaults={transaction}
+        memoSuggestions={memos}
         onSubmit={save}
       />
     );
