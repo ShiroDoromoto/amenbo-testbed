@@ -235,3 +235,40 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* 一覧の下に、ページの位置を真ん中に、前へ・次へのボタンを両脇に出す */
+.transaction-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  max-width: 40rem;
+  margin-top: var(--space-4);
+}
+
+.transaction-pager button {
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.transaction-pager button:hover:not(:disabled),
+.transaction-pager button:focus-visible {
+  background: var(--color-hover);
+}
+
+.transaction-pager button:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+/* 狭い画面では、件数の説明を2行に折り返す */
+.transaction-pager-label {
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
