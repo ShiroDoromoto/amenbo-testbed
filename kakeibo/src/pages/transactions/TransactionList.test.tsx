@@ -14,6 +14,7 @@ const testDbName = 'kakeibo-transaction-list-test';
 afterEach(async () => {
   render(null, document.body);
   document.body.innerHTML = '';
+  window.history.replaceState(null, '', '#');
   await deleteDB(testDbName);
 });
 
@@ -807,4 +808,75 @@ test('金額の範囲は、月を切り替えても残す', async () => {
   expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
     `#/transactions/${dinner.id}`,
   ]);
+});
+
+test('月と絞り込みの条件を URL のクエリに書き、何も絞り込まず今月に戻せばクエリを外す', async () => {
+  const { expense } = await setup();
+  window.history.replaceState(null, '', '#/transactions');
+  renderPage();
+  await days();
+
+  await clickButton('翌月');
+  await selectAccount('現金');
+  await selectType('expense');
+  await selectCategory(expense.id);
+  await searchMemo('ランチ');
+  await enterAmount('金額の下限', '100');
+  await enterAmount('金額の上限', '1,000');
+  const query = new URLSearchParams(window.location.hash.split('?')[1]);
+  expect(window.location.hash.startsWith('#/transactions?')).toBe(true);
+  expect(Object.fromEntries(query)).toEqual({
+    month: '2026-10',
+    account: expect.any(String),
+    type: 'expense',
+    category: expense.id,
+    memo: 'ランチ',
+    min: '100',
+    max: '1,000',
+  });
+
+  await clickButton('前月');
+  await selectAccount('すべての口座');
+  await selectType('');
+  await selectCategory('');
+  await searchMemo('');
+  await enterAmount('金額の下限', '');
+  await enterAmount('金額の上限', '');
+  expect(window.location.hash).toBe('#/transactions');
+});
+
+test('URL のクエリにある月と絞り込みの条件で、最初から絞り込んで出す', async () => {
+  const { cash, expense, lunch } = await setup();
+  const query = new URLSearchParams({
+    month: '2026-09',
+    account: cash.id,
+    type: 'expense',
+    category: expense.id,
+    memo: 'ラン',
+    min: '500',
+    max: '1000',
+  });
+  window.history.replaceState(null, '', `#/transactions?${query}`);
+  renderPage('2026-10-15');
+
+  await waitFor(() => monthLabel() === '2026年9月');
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([`#/transactions/${lunch.id}`]);
+  const value = (selector: string) =>
+    document.querySelector<HTMLInputElement | HTMLSelectElement>(selector)?.value;
+  expect(value('#transaction-filter-account')).toBe(cash.id);
+  expect(value('#transaction-filter-type')).toBe('expense');
+  expect(value('#transaction-filter-category')).toBe(expense.id);
+  expect(value('#transaction-filter-memo')).toBe('ラン');
+  expect(value('[aria-label="金額の下限"]')).toBe('500');
+  expect(value('[aria-label="金額の上限"]')).toBe('1000');
+});
+
+test('URL のクエリの月や収支区分が読めなければ、今月・すべての区分にしてクエリから外す', async () => {
+  await setup();
+  window.history.replaceState(null, '', '#/transactions?month=2026-13&type=transfer');
+  renderPage();
+
+  await waitFor(() => monthLabel() === '2026年9月');
+  expect(await days()).toHaveLength(3);
+  expect(window.location.hash).toBe('#/transactions');
 });
