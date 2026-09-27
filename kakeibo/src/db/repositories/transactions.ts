@@ -66,3 +66,11 @@ export async function listTransactionsByDateRange(
   if (from > to) return [];
   return db.getAllFromIndex('transactions', 'by-date', IDBKeyRange.bound(from, to));
 }
+
+/** `categoryId` のカテゴリを使っている取引の件数を返す。 */
+export async function countTransactionsByCategory(
+  db: KakeiboDBConnection,
+  categoryId: string,
+): Promise<number> {
+  return db.countFromIndex('transactions', 'by-category', categoryId);
+}

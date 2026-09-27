@@ -5,11 +5,14 @@ import { openKakeiboDB, type KakeiboDBConnection } from '../index.ts';
 import {
   addCategory,
   deleteCategory,
+  deleteCategoryAndReassign,
   getCategory,
   listCategories,
   updateCategory,
   type NewCategory,
 } from './categories.ts';
+import { addTransaction, countTransactionsByCategory } from './transactions.ts';
+import { addRecurringTransaction } from './recurring.ts';
 
 const testDbName = 'kakeibo-categories-test';
 
@@ -74,6 +77,104 @@ describe('deleteCategory', () => {
     await addCategory(db, newCategory());
     await deleteCategory(db, 'missing');
     expect(await db.count('categories')).toBe(1);
+  });
+});
+
+describe('deleteCategoryAndReassign', () => {
+  const expense = (categoryId: string) =>
+    ({
+      date: '2026-01-01',
+      amount: 1000,
+      type: 'expense',
+      categoryId,
+      accountId: 'a',
+      memo: '',
+    }) as const;
+
+  it('moves the transactions to the other category and removes the category', async () => {
+    const from = await addCategory(db, newCategory({ name: '外食' }));
+    const to = await addCategory(db, newCategory({ name: '食費' }));
+    const other = await addCategory(db, newCategory({ name: '交通費' }));
+    const moved1 = await addTransaction(db, expense(from.id));
+    const moved2 = await addTransaction(db, expense(from.id));
+    const untouched = await addTransaction(db, expense(other.id));
+    const transfer = await addTransaction(db, {
+      date: '2026-01-01',
+      amount: 500,
+      type: 'transfer',
+      accountId: 'a',
+      toAccountId: 'b',
+      memo: '',
+    });
+
+    await deleteCategoryAndReassign(db, from.id, to.id);
+
+    expect(await getCategory(db, from.id)).toBeUndefined();
+    expect(await db.get('transactions', moved1.id)).toEqual({ ...moved1, categoryId: to.id });
+    expect(await db.get('transactions', moved2.id)).toEqual({ ...moved2, categoryId: to.id });
+    expect(await db.get('transactions', untouched.id)).toEqual(untouched);
+    expect(await db.get('transactions', transfer.id)).toEqual(transfer);
+    expect(await countTransactionsByCategory(db, from.id)).toBe(0);
+    expect(await countTransactionsByCategory(db, to.id)).toBe(2);
+  });
+
+  it('moves the recurring transactions to the other category', async () => {
+    const from = await addCategory(db, newCategory({ name: '外食' }));
+    const to = await addCategory(db, newCategory({ name: '食費' }));
+    const moved = await addRecurringTransaction(db, { ...expense(from.id), dayOfMonth: 1 });
+    const untouched = await addRecurringTransaction(db, { ...expense(to.id), dayOfMonth: 2 });
+
+    await deleteCategoryAndReassign(db, from.id, to.id);
+
+    expect(await db.get('recurringTransactions', moved.id)).toEqual({
+      ...moved,
+      categoryId: to.id,
+    });
+    expect(await db.get('recurringTransactions', untouched.id)).toEqual(untouched);
+  });
+
+  it('removes an unused category', async () => {
+    const from = await addCategory(db, newCategory());
+    const to = await addCategory(db, newCategory());
+    await deleteCategoryAndReassign(db, from.id, to.id);
+    expect(await db.getAllKeys('categories')).toEqual([to.id]);
+  });
+
+  it('throws and changes nothing when the target category does not exist', async () => {
+    const from = await addCategory(db, newCategory());
+    const used = await addTransaction(db, expense(from.id));
+    await expect(deleteCategoryAndReassign(db, from.id, 'missing')).rejects.toThrow(
+      'Category not found: missing',
+    );
+    expect(await getCategory(db, from.id)).toEqual(from);
+    expect(await db.get('transactions', used.id)).toEqual(used);
+  });
+
+  it('throws when the deleted category does not exist', async () => {
+    const to = await addCategory(db, newCategory());
+    await expect(deleteCategoryAndReassign(db, 'missing', to.id)).rejects.toThrow(
+      'Category not found: missing',
+    );
+    expect(await db.count('categories')).toBe(1);
+  });
+
+  it('throws when reassigning to the deleted category itself', async () => {
+    const from = await addCategory(db, newCategory());
+    await expect(deleteCategoryAndReassign(db, from.id, from.id)).rejects.toThrow(
+      `Cannot reassign to the deleted category: ${from.id}`,
+    );
+    expect(await getCategory(db, from.id)).toEqual(from);
+  });
+
+  it('throws and changes nothing when the categories differ in type', async () => {
+    const from = await addCategory(db, newCategory({ type: 'expense' }));
+    const to = await addCategory(db, newCategory({ type: 'income' }));
+    const used = await addTransaction(db, expense(from.id));
+    await expect(deleteCategoryAndReassign(db, from.id, to.id)).rejects.toThrow(
+      'Category type mismatch: expense to income',
+    );
+    expect(await getCategory(db, from.id)).toEqual(from);
+    expect(await db.get('transactions', used.id)).toEqual(used);
   });
 });
 
