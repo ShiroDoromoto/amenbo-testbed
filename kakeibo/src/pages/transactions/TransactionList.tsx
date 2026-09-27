@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
 import { isIncomeExpenseType, isTransfer, type Transaction } from '../../domain/transaction.ts';
@@ -13,6 +13,7 @@ import { filterTransactionsByAccount } from './filterTransactionsByAccount.ts';
 import { filterTransactionsByAmount } from './filterTransactionsByAmount.ts';
 import { filterTransactionsByMemo } from './filterTransactionsByMemo.ts';
 import { groupTransactionsByDate, type TransactionDay } from './groupTransactionsByDate.ts';
+import { paginate, type Page } from './paginate.ts';
 import {
   isTransactionSortOrder,
   sortTransactions,
@@ -42,7 +43,12 @@ type Props = {
   dbName?: string;
   /** 今日の日付。最初に今日の月を出す。テストで日付を決めるときに渡す。 */
   today?: DateString;
+  /** 1ページに出す取引の数。テストで小さくするときに渡す。 */
+  pageSize?: number;
 };
+
+/** 1ページに出す取引の数の既定。 */
+const defaultPageSize = 50;
 
 // カテゴリや口座が消されていても、一覧は出す。
 const missingName = '（削除済み）';
@@ -132,9 +138,12 @@ function subtotalClass(subtotal: Yen): string {
  * 金額の下限・上限を入れると、その範囲（両端を含む）の取引だけを出す。整数に直せない入力は、その端を絞り込まない。
  * 並び順で、日付の古い順や金額の順に並べ替える。金額の順では日ごとにまとめず、取引ごとに日付を添える。
  * 選んだ並び順は、月を切り替えても残す。
+ * 取引が `pageSize` 件を超えたら、ページに分けて出し、前へ・次へのボタンでページを送る。
+ * 月・絞り込み・検索・並び順を変えたら、最初のページに戻す。
+ * 日ごとの小計は、日がページをまたいでも、その日の取引すべてで出す。
  * 月と絞り込みの条件は URL のクエリに持たせ、再読み込みしても残す。
  */
-export function TransactionList({ dbName, today: todayProp }: Props) {
+export function TransactionList({ dbName, today: todayProp, pageSize = defaultPageSize }: Props) {
   const [today] = useState(() => todayProp ?? toDateString(new Date()));
   const [initial] = useState(() =>
     readTransactionListQuery(queryFromHash(window.location.hash), today),
@@ -155,6 +164,28 @@ export function TransactionList({ dbName, today: todayProp }: Props) {
   const [maxAmountInput, setMaxAmountInput] = useState(initial.maxAmount);
   const minAmount = parseAmountBound(minAmountInput);
   const maxAmount = parseAmountBound(maxAmountInput);
+  // 出す取引の組が変わったら、最初のページに戻す。組を表す値を覚えておき、変わったかを比べる。
+  // 戻したことも覚えておかないと、月を進めて戻したときに、前のページが出てしまう。
+  const listKey = JSON.stringify([
+    month,
+    accountId,
+    categoryId,
+    typeFilter,
+    keyword,
+    sortOrder,
+    minAmountInput,
+    maxAmountInput,
+  ]);
+  const [pageState, setPageState] = useState({ key: listKey, page: 1 });
+  if (pageState.key !== listKey) setPageState({ key: listKey, page: 1 });
+  const page = pageState.key === listKey ? pageState.page : 1;
+  const listRef = useRef<HTMLDivElement>(null);
+
+  function goToPage(next: number) {
+    setPageState({ key: listKey, page: next });
+    // 下のボタンで送ったときに、新しいページの頭から読めるようにする。
+    listRef.current?.scrollIntoView?.({ block: 'start' });
+  }
 
   useEffect(() => {
     const query: TransactionListQuery = {
@@ -383,6 +414,24 @@ export function TransactionList({ dbName, today: todayProp }: Props) {
     );
   }
 
+  /** ページ送り。ページが1つしか無ければ出さない。 */
+  function pager({ page, pageCount, first, last, total }: Page<Transaction>) {
+    if (pageCount <= 1) return null;
+    return (
+      <nav class="transaction-pager" aria-label="ページ送り">
+        <button type="button" disabled={page === 1} onClick={() => goToPage(page - 1)}>
+          前へ
+        </button>
+        <span class="transaction-pager-label" aria-live="polite">
+          {page} / {pageCount}ページ（{total}件中 {first}〜{last}件目）
+        </span>
+        <button type="button" disabled={page === pageCount} onClick={() => goToPage(page + 1)}>
+          次へ
+        </button>
+      </nav>
+    );
+  }
+
   function body() {
     if (!loaded || loaded.month !== month) return <p>読み込み中…</p>;
     const byAccount =
@@ -419,18 +468,29 @@ export function TransactionList({ dbName, today: todayProp }: Props) {
       );
     }
     const sorted = sortTransactions(transactions, sortOrder);
+    const current = paginate(sorted, page, pageSize);
     // 金額の順では、同じ日の取引が離れるので、日ごとにまとめない。
     if (sortOrder === 'amount-desc' || sortOrder === 'amount-asc') {
       return (
-        <div class="transaction-list">
-          <ul class="transaction-day-items">{sorted.map((t) => row(t, loaded, true))}</ul>
-        </div>
+        <>
+          <div class="transaction-list" ref={listRef}>
+            <ul class="transaction-day-items">{current.items.map((t) => row(t, loaded, true))}</ul>
+          </div>
+          {pager(current)}
+        </>
       );
     }
+    // 小計は、ページに出ていない分も含めた、その日の取引すべてで出す。
+    const subtotals = new Map(groupTransactionsByDate(sorted).map((d) => [d.date, d.subtotal]));
     return (
-      <div class="transaction-list">
-        {groupTransactionsByDate(sorted).map((d) => day(d, loaded))}
-      </div>
+      <>
+        <div class="transaction-list" ref={listRef}>
+          {groupTransactionsByDate(current.items).map((d) =>
+            day({ ...d, subtotal: subtotals.get(d.date)! }, loaded),
+          )}
+        </div>
+        {pager(current)}
+      </>
     );
   }
 
