@@ -1,29 +1,23 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
-import {
-  isIncomeExpenseType,
-  isTransfer,
-  type IncomeExpenseType,
-  type Transaction,
-} from '../../domain/transaction.ts';
+import { isIncomeExpenseType, isTransfer, type Transaction } from '../../domain/transaction.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { listAccounts } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
 import { listTransactionsByDateRange } from '../../db/repositories/transactions.ts';
-import {
-  addMonths,
-  endOfMonth,
-  startOfMonth,
-  toDateString,
-  type DateString,
-} from '../../lib/date.ts';
+import { addMonths, endOfMonth, toDateString, type DateString } from '../../lib/date.ts';
 import { formatYen, parseYen, type Yen } from '../../lib/money.ts';
-import { hashFromPath } from '../../router/index.ts';
+import { hashFromPath, queryFromHash, replaceHashQuery } from '../../router/index.ts';
 import { filterTransactionsByAccount } from './filterTransactionsByAccount.ts';
 import { filterTransactionsByAmount } from './filterTransactionsByAmount.ts';
 import { filterTransactionsByMemo } from './filterTransactionsByMemo.ts';
 import { groupTransactionsByDate, type TransactionDay } from './groupTransactionsByDate.ts';
+import {
+  readTransactionListQuery,
+  writeTransactionListQuery,
+  type TransactionListQuery,
+} from './transactionListQuery.ts';
 import './transactionList.css';
 
 type Loaded = {
@@ -77,7 +71,7 @@ const incomeExpenseLabels = [
 ] as const;
 
 /** 絞り込む収支区分。空文字はすべての区分。 */
-type TypeFilter = IncomeExpenseType | '';
+type TypeFilter = TransactionListQuery['type'];
 
 /**
  * 収支区分とカテゴリで絞り込む。どちらも空文字なら絞り込まない。
@@ -123,23 +117,41 @@ function subtotalClass(subtotal: Yen): string {
  * 収支区分を選ぶと、カテゴリの選択肢はその区分のものだけにする。
  * メモの検索欄にキーワードを入れると、メモにそのキーワードを含む取引だけを出す。月を切り替えてもキーワードは残す。
  * 金額の下限・上限を入れると、その範囲（両端を含む）の取引だけを出す。整数に直せない入力は、その端を絞り込まない。
+ * 月と絞り込みの条件は URL のクエリに持たせ、再読み込みしても残す。
  */
-export function TransactionList({ dbName, today }: Props) {
-  const [month, setMonth] = useState(() => startOfMonth(today ?? toDateString(new Date())));
+export function TransactionList({ dbName, today: todayProp }: Props) {
+  const [today] = useState(() => todayProp ?? toDateString(new Date()));
+  const [initial] = useState(() =>
+    readTransactionListQuery(queryFromHash(window.location.hash), today),
+  );
+  const [month, setMonth] = useState(initial.month);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   /** 絞り込む口座の id。空文字はすべての口座。 */
-  const [accountId, setAccountId] = useState('');
+  const [accountId, setAccountId] = useState(initial.accountId);
   /** 絞り込むカテゴリの id。空文字はすべてのカテゴリ。 */
-  const [categoryId, setCategoryId] = useState('');
+  const [categoryId, setCategoryId] = useState(initial.categoryId);
   /** 絞り込む収支区分。空文字はすべての区分。 */
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>(initial.type);
   /** メモを検索するキーワード。空文字は検索しない。 */
-  const [keyword, setKeyword] = useState('');
+  const [keyword, setKeyword] = useState(initial.keyword);
   /** 金額の下限と上限の入力。空文字はその端を絞り込まない。 */
-  const [minAmountInput, setMinAmountInput] = useState('');
-  const [maxAmountInput, setMaxAmountInput] = useState('');
+  const [minAmountInput, setMinAmountInput] = useState(initial.minAmount);
+  const [maxAmountInput, setMaxAmountInput] = useState(initial.maxAmount);
   const minAmount = parseAmountBound(minAmountInput);
   const maxAmount = parseAmountBound(maxAmountInput);
+
+  useEffect(() => {
+    const query: TransactionListQuery = {
+      month,
+      accountId,
+      type: typeFilter,
+      categoryId,
+      keyword,
+      minAmount: minAmountInput,
+      maxAmount: maxAmountInput,
+    };
+    replaceHashQuery(writeTransactionListQuery(query, today));
+  }, [today, month, accountId, typeFilter, categoryId, keyword, minAmountInput, maxAmountInput]);
 
   useEffect(() => {
     const opening = openKakeiboDB(dbName);
