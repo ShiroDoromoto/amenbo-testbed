@@ -2,7 +2,7 @@ import type { ComponentChildren } from 'preact';
 import { useId, useRef, useState } from 'preact/hooks';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
-import type { TransactionType } from '../../domain/transaction.ts';
+import type { IncomeExpenseType } from '../../domain/transaction.ts';
 import type { NewTransaction } from '../../db/repositories/transactions.ts';
 import {
   validateTransactionInput,
@@ -12,7 +12,7 @@ import {
 } from './validateTransactionInput.ts';
 import './transactionForm.css';
 
-const typeLabels: Record<TransactionType, string> = {
+const typeLabels: Record<IncomeExpenseType, string> = {
   expense: '支出',
   income: '収入',
 };
@@ -36,7 +36,7 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
     categoryId: '',
     accountId: accounts[0]?.id ?? '',
   });
-  const [type, setType] = useState<TransactionType>('expense');
+  const [type, setType] = useState<IncomeExpenseType>('expense');
   const [memo, setMemo] = useState('');
   const [saving, setSaving] = useState(false);
   // 保存を押すまではエラーを出さない。押したあとは入力を変えるたびに確かめ直し、直した欄のエラーを消す。
@@ -100,7 +100,7 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
     <form class="transaction-form" ref={formRef} noValidate onSubmit={handleSubmit}>
       <fieldset class="transaction-form-type">
         <legend>収支</legend>
-        {(Object.keys(typeLabels) as TransactionType[]).map((value) => (
+        {(Object.keys(typeLabels) as IncomeExpenseType[]).map((value) => (
           <label key={value}>
             <input
               type="radio"

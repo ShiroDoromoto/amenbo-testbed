@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { deleteDB } from 'idb';
 import { openKakeiboDB, type KakeiboDBConnection } from '../index.ts';
+import type { IncomeExpenseTransaction, TransferTransaction } from '../../domain/transaction.ts';
 import {
   addTransaction,
   deleteTransaction,
@@ -12,13 +13,29 @@ import {
 
 const testDbName = 'kakeibo-transactions-test';
 
-function newTransaction(overrides: Partial<NewTransaction> = {}): NewTransaction {
+function newTransaction(
+  overrides: Partial<Omit<IncomeExpenseTransaction, 'id'>> = {},
+): NewTransaction {
   return {
     date: '2026-01-01',
     amount: 1000,
     type: 'expense',
     categoryId: 'c',
     accountId: 'a',
+    memo: '',
+    ...overrides,
+  };
+}
+
+function newTransfer(
+  overrides: Partial<Omit<TransferTransaction, 'id'>> = {},
+): Omit<TransferTransaction, 'id'> {
+  return {
+    date: '2026-01-01',
+    amount: 30000,
+    type: 'transfer',
+    accountId: 'bank',
+    toAccountId: 'cash',
     memo: '',
     ...overrides,
   };
@@ -49,6 +66,21 @@ describe('addTransaction', () => {
     expect(first.id).not.toBe(second.id);
     expect(await db.count('transactions')).toBe(2);
   });
+
+  it('stores a transfer with the accounts it moves money between', async () => {
+    const added = await addTransaction(db, newTransfer({ memo: '引き出し' }));
+    expect(await db.get('transactions', added.id)).toEqual({
+      ...newTransfer({ memo: '引き出し' }),
+      id: added.id,
+    });
+  });
+
+  it('rejects a transfer to the same account', async () => {
+    await expect(
+      addTransaction(db, newTransfer({ accountId: 'cash', toAccountId: 'cash' })),
+    ).rejects.toThrow('Transfer to the same account: cash');
+    expect(await db.count('transactions')).toBe(0);
+  });
 });
 
 describe('updateTransaction', () => {
@@ -57,6 +89,21 @@ describe('updateTransaction', () => {
     const changed = { ...added, amount: 2500, memo: '修正' };
     await updateTransaction(db, changed);
     expect(await db.get('transactions', added.id)).toEqual(changed);
+  });
+
+  it('turns an expense into a transfer', async () => {
+    const added = await addTransaction(db, newTransaction());
+    const changed = { ...newTransfer(), id: added.id };
+    await updateTransaction(db, changed);
+    expect(await db.get('transactions', added.id)).toEqual(changed);
+  });
+
+  it('rejects a transfer to the same account', async () => {
+    const added = await addTransaction(db, newTransfer());
+    await expect(
+      updateTransaction(db, { ...added, type: 'transfer', accountId: 'a', toAccountId: 'a' }),
+    ).rejects.toThrow('Transfer to the same account: a');
+    expect(await db.get('transactions', added.id)).toEqual(added);
   });
 
   it('throws when the transaction does not exist', async () => {

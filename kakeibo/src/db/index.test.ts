@@ -2,11 +2,11 @@ import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { deleteDB } from 'idb';
 import { dbVersion, openKakeiboDB, type KakeiboDBConnection } from './index.ts';
-import type { Transaction } from '../domain/transaction.ts';
+import type { IncomeExpenseTransaction } from '../domain/transaction.ts';
 
 const testDbName = 'kakeibo-test';
 
-function transaction(overrides: Partial<Transaction>): Transaction {
+function transaction(overrides: Partial<IncomeExpenseTransaction>): IncomeExpenseTransaction {
   return {
     id: 't',
     date: '2026-01-01',
@@ -63,6 +63,27 @@ describe('openKakeiboDB', () => {
     expect(
       (await db.getAllFromIndex('transactions', 'by-account', 'bank')).map((t) => t.id),
     ).toEqual(['2']);
+  });
+
+  it('looks up transfers by the account they go to', async () => {
+    db = await openKakeiboDB(testDbName);
+    const transfer = {
+      id: 'x',
+      date: '2026-01-10',
+      amount: 30000,
+      type: 'transfer',
+      accountId: 'bank',
+      toAccountId: 'cash',
+      memo: '',
+    } as const;
+    await db.put('transactions', transfer);
+    await db.put('transactions', transaction({ id: '1', accountId: 'cash' }));
+
+    expect(await db.getAllFromIndex('transactions', 'by-to-account', 'cash')).toEqual([transfer]);
+    expect(
+      (await db.getAllFromIndex('transactions', 'by-account', 'bank')).map((t) => t.id),
+    ).toEqual(['x']);
+    expect(await db.getAllFromIndex('transactions', 'by-category', 'c')).toHaveLength(1);
   });
 
   it('keeps data when reopened', async () => {
