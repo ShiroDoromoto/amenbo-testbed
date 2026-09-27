@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, expect, test } from 'vitest';
@@ -34,6 +35,18 @@ test('ハッシュに合った画面を本文に出す', () => {
   window.location.hash = '#/transactions';
   const root = renderApp();
   expect(root.querySelector('main h2')?.textContent).toBe('取引');
+});
+
+test('取引の id のハッシュでは、取引の編集画面を出す', () => {
+  window.location.hash = '#/transactions/abc';
+  const root = renderApp();
+  expect(root.querySelector('main h2')?.textContent).toBe('取引の編集');
+});
+
+test('`#/transactions/new` では、編集画面ではなく入力画面を出す', () => {
+  window.location.hash = '#/transactions/new';
+  const root = renderApp();
+  expect(root.querySelector('main h2')?.textContent).toBe('取引の入力');
 });
 
 test('知らないハッシュでは見つからない旨を出す', () => {

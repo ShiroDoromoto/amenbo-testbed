@@ -49,7 +49,7 @@ export function NewTransactionPage({ dbName }: Props) {
         <TransactionForm
           categories={loaded.categories}
           accounts={loaded.accounts}
-          initialDate={toDateString(new Date())}
+          defaults={{ date: toDateString(new Date()) }}
           onSubmit={save}
         />
       ) : (

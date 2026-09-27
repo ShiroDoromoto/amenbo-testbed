@@ -29,7 +29,7 @@ function renderForm(onSubmit = vi.fn(), accountList: Account[] = accounts) {
       <TransactionForm
         categories={categories}
         accounts={accountList}
-        initialDate="2026-09-28"
+        defaults={{ date: '2026-09-28' }}
         onSubmit={onSubmit}
       />
     </ToastProvider>,
