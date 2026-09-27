@@ -10,6 +10,7 @@ import { listCategories } from '../../db/repositories/categories.ts';
 import {
   deleteTransaction,
   getTransaction,
+  restoreTransaction,
   updateTransaction,
   type NewTransaction,
 } from '../../db/repositories/transactions.ts';
@@ -31,9 +32,14 @@ type Props = {
   dbName?: string;
 };
 
+/** 削除したあと、「元に戻す」ボタンを出しておくミリ秒。 */
+export const UNDO_DELETE_DURATION = 5000;
+
 /**
  * 取引の編集画面。id の取引を DB から読んでフォームに入れ、保存したら取引の一覧に戻る。
  * 確認ダイアログで確かめてから、取引を削除することもできる。
+ * 削除すると取引の一覧に戻り、5秒間だけ「元に戻す」ボタンの付いたトーストを出す。
+ * 押すと取引を同じ id で入れ直し、その取引の編集画面に戻る。
  */
 export function EditTransactionPage({ id, dbName }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -65,8 +71,24 @@ export function EditTransactionPage({ id, dbName }: Props) {
     navigate('/transactions');
   }
 
+  async function undoDelete(transaction: Transaction) {
+    let db: KakeiboDBConnection | undefined;
+    try {
+      db = await openKakeiboDB(dbName);
+      await restoreTransaction(db, transaction);
+    } catch {
+      toast.show('元に戻せませんでした', { kind: 'error' });
+      return;
+    } finally {
+      db?.close();
+    }
+    toast.show('元に戻しました', { kind: 'success' });
+    navigate(`/transactions/${transaction.id}`);
+  }
+
   async function remove() {
-    if (!loaded || deleting) return;
+    if (!loaded?.transaction || deleting) return;
+    const { transaction } = loaded;
     setDeleting(true);
     try {
       await deleteTransaction(loaded.db, id);
@@ -77,7 +99,11 @@ export function EditTransactionPage({ id, dbName }: Props) {
       setDeleting(false);
       setConfirming(false);
     }
-    toast.show('削除しました', { kind: 'success' });
+    toast.show('削除しました', {
+      kind: 'success',
+      duration: UNDO_DELETE_DURATION,
+      action: { label: '元に戻す', onClick: () => void undoDelete(transaction) },
+    });
     navigate('/transactions');
   }
 
@@ -110,7 +136,7 @@ export function EditTransactionPage({ id, dbName }: Props) {
           onConfirm={() => void remove()}
           onCancel={() => setConfirming(false)}
         >
-          <p>この操作は取り消せません。</p>
+          <p>削除してから5秒間は、元に戻せます。</p>
         </ConfirmDialog>
       </>
     );

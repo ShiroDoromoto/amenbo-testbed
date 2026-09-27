@@ -96,6 +96,33 @@ test('確認ダイアログで削除すると、取引が消えて取引の一�
   await expect(main.getByText('取引が見つかりません')).toBeVisible();
 });
 
+test('削除のあと「元に戻す」を押すと、取引が戻って編集画面に戻る', async ({ page }) => {
+  const id = await seedTransaction(page);
+  await page.goto(`/#/transactions/${id}`);
+  const main = page.getByRole('main');
+  await main.getByRole('button', { name: 'この取引を削除する' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '削除する' }).click();
+  await expect(page).toHaveURL(/#\/transactions$/);
+
+  await page.getByRole('button', { name: '元に戻す' }).click();
+  await expect(page).toHaveURL(new RegExp(`#/transactions/${id}$`));
+  await expect(page.getByText('元に戻しました')).toBeVisible();
+  await expect(main.getByLabel('メモ')).toHaveValue('ランチ');
+});
+
+test('スマホ幅でも、「元に戻す」の付いたトーストが横にはみ出さない', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  const id = await seedTransaction(page);
+  await page.goto(`/#/transactions/${id}`);
+  await page.getByRole('button', { name: 'この取引を削除する' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '削除する' }).click();
+  await expect(page.getByRole('button', { name: '元に戻す' })).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(0);
+});
+
 test('スマホ幅でも、削除の確認ダイアログが横にはみ出さない', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
   const id = await seedTransaction(page);

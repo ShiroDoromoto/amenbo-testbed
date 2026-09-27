@@ -20,6 +20,7 @@
   /* トーストなど、画面に重ねて出す通知 */
   --color-toast-text: #ffffff;
   --color-toast-bg: #1f2328;
+  --color-toast-action: #79c0ff;
   /* ダイアログの後ろを覆う背景 */
   --color-backdrop: rgb(0 0 0 / 40%);
 

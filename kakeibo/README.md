@@ -48,6 +48,11 @@ toast.show('保存できませんでした', { kind: 'error', duration: 0 });
 
 `kind` は `info`（既定）・`success`・`error`。`error` は `role="alert"`、ほかは `role="status"` で出す。
 `duration` はミリ秒で、既定は 4000。0 にすると、閉じるボタンを押すか `dismiss(id)` を呼ぶまで残る。
+`action` を渡すと、文言の横にボタンを添える。押すと `onClick` を呼び、トーストを閉じる。
+
+```tsx
+toast.show('削除しました', { duration: 5000, action: { label: '元に戻す', onClick: undo } });
+```
 
 ## 確認ダイアログ
 

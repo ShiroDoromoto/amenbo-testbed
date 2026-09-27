@@ -25,6 +25,15 @@ export async function addTransaction(
   return transaction;
 }
 
+/** 消した取引を、同じ id のまま入れ直す。同じ id の取引が既にあれば投げる。 */
+export async function restoreTransaction(
+  db: KakeiboDBConnection,
+  transaction: Transaction,
+): Promise<void> {
+  assertSavable(transaction);
+  await db.add('transactions', transaction);
+}
+
 /** id の取引を返す。無ければ `undefined` を返す。 */
 export async function getTransaction(
   db: KakeiboDBConnection,

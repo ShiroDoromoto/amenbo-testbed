@@ -42,6 +42,17 @@
   overflow-wrap: anywhere;
 }
 
+.toast-action {
+  flex: none;
+  padding: 0 var(--space-1);
+  border: none;
+  color: var(--color-toast-action);
+  font: inherit;
+  font-weight: bold;
+  background: none;
+  cursor: pointer;
+}
+
 .toast-close {
   flex: none;
   padding: 0 var(--space-1);

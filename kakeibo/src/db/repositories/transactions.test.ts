@@ -10,6 +10,7 @@ import {
   getTransaction,
   listTransactions,
   listTransactionsByDateRange,
+  restoreTransaction,
   updateTransaction,
   type NewTransaction,
 } from './transactions.ts';
@@ -141,6 +142,21 @@ describe('deleteTransaction', () => {
     await addTransaction(db, newTransaction());
     await deleteTransaction(db, 'missing');
     expect(await db.count('transactions')).toBe(1);
+  });
+});
+
+describe('restoreTransaction', () => {
+  it('puts a deleted transaction back under the same id', async () => {
+    const added = await addTransaction(db, newTransaction({ memo: 'ランチ' }));
+    await deleteTransaction(db, added.id);
+    await restoreTransaction(db, added);
+    expect(await db.get('transactions', added.id)).toEqual(added);
+  });
+
+  it('throws when a transaction with the id already exists', async () => {
+    const added = await addTransaction(db, newTransaction());
+    await expect(restoreTransaction(db, { ...added, amount: 1 })).rejects.toThrow();
+    expect(await db.get('transactions', added.id)).toEqual(added);
   });
 });
 
