@@ -29,6 +29,26 @@
   white-space: nowrap;
 }
 
+/* 絞り込みの見出しを左に、選択肢を残りの幅いっぱいに出す */
+.transaction-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 40rem;
+  margin-bottom: var(--space-4);
+}
+
+.transaction-filter select {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2);
+  font: inherit;
+  color: inherit;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
 .transaction-list {
   max-width: 40rem;
 }
