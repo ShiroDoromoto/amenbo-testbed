@@ -9,7 +9,8 @@ import { deleteCategory, listCategories } from '../../db/repositories/categories
 import { addRecurringTransaction } from '../../db/repositories/recurring.ts';
 import { addTransaction } from '../../db/repositories/transactions.ts';
 import { defaultCategories } from '../../db/seed.ts';
-import { CategoryList, newCategoryColor } from './CategoryList.tsx';
+import { defaultCategoryColor } from './categoryColors.ts';
+import { CategoryList } from './CategoryList.tsx';
 
 const testDbName = 'kakeibo-category-list-test';
 
@@ -93,7 +94,75 @@ test('入力した名前で、選んだ収支区分の末尾にカテゴリを�
   const db = await openKakeiboDB(testDbName);
   const added = (await listCategories(db, 'income')).at(-1);
   db.close();
-  expect(added).toMatchObject({ name: '副業', type: 'income', color: newCategoryColor, order: 4 });
+  expect(added).toMatchObject({
+    name: '副業',
+    type: 'income',
+    color: defaultCategoryColor,
+    order: 4,
+  });
+});
+
+async function check(input: HTMLInputElement) {
+  await act(() => {
+    input.checked = true;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
+test('選んだ色でカテゴリを足し、足したあとは色の選択を初期値に戻す', async () => {
+  renderPage();
+  const form = await waitFor(() => document.querySelector<HTMLFormElement>('.category-add-form'));
+  const blue = form.querySelector<HTMLInputElement>('[aria-label="青"]')!;
+  expect(form.querySelector<HTMLInputElement>('[aria-label="灰色"]')!.checked).toBe(true);
+
+  await check(blue);
+  await typeInto(form.querySelector<HTMLInputElement>('[name="name"]')!, '書籍');
+  await submit(form);
+  await waitFor(() => namesIn('支出').includes('書籍'));
+  expect(form.querySelector<HTMLInputElement>('[aria-label="灰色"]')!.checked).toBe(true);
+
+  const db = await openKakeiboDB(testDbName);
+  const added = (await listCategories(db, 'expense')).at(-1);
+  db.close();
+  expect(added).toMatchObject({ name: '書籍', color: '#1c7ed6' });
+});
+
+test('カテゴリの色を、その場で変える', async () => {
+  renderPage();
+  await waitFor(() => document.querySelector('.category-list'));
+  await act(() => button('食費の色を変える')!.click());
+
+  const picker = [...document.querySelectorAll('fieldset')].find(
+    (f) => f.querySelector('legend')?.textContent === '食費の色',
+  )!;
+  const current = picker.querySelector<HTMLInputElement>('input:checked')!;
+  expect(current.getAttribute('aria-label')).toBe('オレンジ');
+  expect(document.activeElement).toBe(current);
+
+  await check(picker.querySelector<HTMLInputElement>('[aria-label="紫"]')!);
+  await submit(picker.closest('form')!);
+  await waitFor(() => !document.querySelector('.category-recolor-form'));
+
+  const db = await openKakeiboDB(testDbName);
+  const food = (await listCategories(db, 'expense')).find((c) => c.name === '食費');
+  db.close();
+  expect(food?.color).toBe('#5f3dc4');
+});
+
+test('色の変更をキャンセルすると、元の色のまま戻る', async () => {
+  renderPage();
+  await waitFor(() => document.querySelector('.category-list'));
+  await act(() => button('給与の色を変える')!.click());
+  await check(
+    document.querySelector<HTMLInputElement>('.category-recolor-form [aria-label="赤"]')!,
+  );
+  await act(() => button('キャンセル')!.click());
+  expect(document.querySelector('.category-recolor-form')).toBeNull();
+
+  const db = await openKakeiboDB(testDbName);
+  const salary = (await listCategories(db, 'income')).find((c) => c.name === '給与');
+  db.close();
+  expect(salary?.color).toBe('#2f9e44');
 });
 
 test('名前が空か、同じ収支区分に同じ名前があれば、足さずにエラーを出す', async () => {
