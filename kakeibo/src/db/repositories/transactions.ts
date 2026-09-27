@@ -88,3 +88,28 @@ export async function countTransactionsByCategory(
 ): Promise<number> {
   return db.countFromIndex('transactions', 'by-category', categoryId);
 }
+
+/** `listRecentMemos` が返すメモの件数の既定値。 */
+export const RECENT_MEMOS_LIMIT = 50;
+
+/**
+ * 過去の取引のメモを、日付の新しい取引のものから順に、重ねずに最大 `limit` 件返す。
+ * 前後の空白を除いて比べ、空のメモは除く。
+ */
+export async function listRecentMemos(
+  db: KakeiboDBConnection,
+  limit = RECENT_MEMOS_LIMIT,
+): Promise<string[]> {
+  if (limit <= 0) return [];
+  const memos = new Set<string>();
+  let cursor = await db.transaction('transactions').store.index('by-date').openCursor(null, 'prev');
+  while (cursor) {
+    const memo = cursor.value.memo.trim();
+    if (memo !== '') {
+      memos.add(memo);
+      if (memos.size >= limit) break;
+    }
+    cursor = await cursor.continue();
+  }
+  return [...memos];
+}

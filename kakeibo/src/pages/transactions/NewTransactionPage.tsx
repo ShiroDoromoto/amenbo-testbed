@@ -4,7 +4,12 @@ import type { Category } from '../../domain/category.ts';
 import { openKakeiboDB, type KakeiboDBConnection } from '../../db/index.ts';
 import { listAccounts } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
-import { addTransaction, type NewTransaction } from '../../db/repositories/transactions.ts';
+import {
+  addTransaction,
+  listRecentMemos,
+  RECENT_MEMOS_LIMIT,
+  type NewTransaction,
+} from '../../db/repositories/transactions.ts';
 import { toDateString } from '../../lib/date.ts';
 import { TransactionForm } from './TransactionForm.tsx';
 
@@ -12,6 +17,7 @@ type Loaded = {
   db: KakeiboDBConnection;
   categories: Category[];
   accounts: Account[];
+  memos: string[];
 };
 
 type Props = {
@@ -20,8 +26,9 @@ type Props = {
 };
 
 /**
- * 取引の入力画面。カテゴリと口座を DB から読み、入力された取引を DB に足す。
+ * 取引の入力画面。カテゴリと口座と過去のメモを DB から読み、入力された取引を DB に足す。
  * カテゴリと口座は、前回保存したときに選んだものを初期値にする。
+ * 足した取引のメモは、次の入力から候補の先頭に出す。
  */
 export function NewTransactionPage({ dbName }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -31,8 +38,12 @@ export function NewTransactionPage({ dbName }: Props) {
     let cancelled = false;
     void (async () => {
       const db = await opening;
-      const [categories, accounts] = await Promise.all([listCategories(db), listAccounts(db)]);
-      if (!cancelled) setLoaded({ db, categories, accounts });
+      const [categories, accounts, memos] = await Promise.all([
+        listCategories(db),
+        listAccounts(db),
+        listRecentMemos(db),
+      ]);
+      if (!cancelled) setLoaded({ db, categories, accounts, memos });
     })();
     return () => {
       cancelled = true;
@@ -43,6 +54,15 @@ export function NewTransactionPage({ dbName }: Props) {
   async function save(transaction: NewTransaction) {
     if (!loaded) return;
     await addTransaction(loaded.db, transaction);
+    const { memo } = transaction;
+    if (memo === '') return;
+    setLoaded(
+      (prev) =>
+        prev && {
+          ...prev,
+          memos: [memo, ...prev.memos.filter((m) => m !== memo)].slice(0, RECENT_MEMOS_LIMIT),
+        },
+    );
   }
 
   return (
@@ -54,6 +74,7 @@ export function NewTransactionPage({ dbName }: Props) {
           accounts={loaded.accounts}
           defaults={{ date: toDateString(new Date()) }}
           rememberSelection
+          memoSuggestions={loaded.memos}
           onSubmit={save}
         />
       ) : (

@@ -9,6 +9,7 @@ import {
   deleteTransaction,
   getTransaction,
   listTransactions,
+  listRecentMemos,
   listTransactionsByDateRange,
   restoreTransaction,
   updateTransaction,
@@ -208,5 +209,35 @@ describe('countTransactionsByCategory', () => {
 
   it('returns 0 when no transaction uses the category', async () => {
     expect(await countTransactionsByCategory(db, 'missing')).toBe(0);
+  });
+});
+
+describe('listRecentMemos', () => {
+  it('returns memos from the newest transaction first, without duplicates', async () => {
+    await addTransaction(db, newTransaction({ date: '2026-01-01', memo: 'ランチ' }));
+    await addTransaction(db, newTransaction({ date: '2026-01-03', memo: 'コンビニ' }));
+    await addTransaction(db, newTransaction({ date: '2026-01-02', memo: 'ランチ' }));
+    await addTransaction(db, newTransfer({ date: '2026-01-04', memo: '引き出し' }));
+    expect(await listRecentMemos(db)).toEqual(['引き出し', 'コンビニ', 'ランチ']);
+  });
+
+  it('trims memos and skips empty ones', async () => {
+    await addTransaction(db, newTransaction({ date: '2026-01-01', memo: 'ランチ' }));
+    await addTransaction(db, newTransaction({ date: '2026-01-02', memo: ' ランチ ' }));
+    await addTransaction(db, newTransaction({ date: '2026-01-03', memo: '' }));
+    await addTransaction(db, newTransaction({ date: '2026-01-04', memo: '  ' }));
+    expect(await listRecentMemos(db)).toEqual(['ランチ']);
+  });
+
+  it('returns at most limit memos', async () => {
+    await addTransaction(db, newTransaction({ date: '2026-01-01', memo: 'a' }));
+    await addTransaction(db, newTransaction({ date: '2026-01-02', memo: 'b' }));
+    await addTransaction(db, newTransaction({ date: '2026-01-03', memo: 'c' }));
+    expect(await listRecentMemos(db, 2)).toEqual(['c', 'b']);
+    expect(await listRecentMemos(db, 0)).toEqual([]);
+  });
+
+  it('returns nothing when there are no transactions', async () => {
+    expect(await listRecentMemos(db)).toEqual([]);
   });
 });
