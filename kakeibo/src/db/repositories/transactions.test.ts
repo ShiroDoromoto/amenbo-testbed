@@ -8,6 +8,7 @@ import {
   countTransactionsByCategory,
   deleteTransaction,
   getTransaction,
+  listTransactions,
   listTransactionsByDateRange,
   updateTransaction,
   type NewTransaction,
@@ -140,6 +141,20 @@ describe('deleteTransaction', () => {
     await addTransaction(db, newTransaction());
     await deleteTransaction(db, 'missing');
     expect(await db.count('transactions')).toBe(1);
+  });
+});
+
+describe('listTransactions', () => {
+  it('returns every transaction, including transfers', async () => {
+    const expense = await addTransaction(db, newTransaction({ date: '2026-02-01' }));
+    const transfer = await addTransaction(db, newTransfer({ date: '2025-12-31' }));
+
+    const all = await listTransactions(db);
+    expect(all.map((t) => t.id).sort()).toEqual([expense.id, transfer.id].sort());
+  });
+
+  it('returns an empty list when there are no transactions', async () => {
+    expect(await listTransactions(db)).toEqual([]);
   });
 });
 
