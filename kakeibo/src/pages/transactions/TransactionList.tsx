@@ -15,6 +15,7 @@ import {
 } from '../../lib/date.ts';
 import { formatYen, type Yen } from '../../lib/money.ts';
 import { hashFromPath } from '../../router/index.ts';
+import { filterTransactionsByAccount } from './filterTransactionsByAccount.ts';
 import { groupTransactionsByDate, type TransactionDay } from './groupTransactionsByDate.ts';
 import './transactionList.css';
 
@@ -25,6 +26,8 @@ type Loaded = {
   /** 並び順に並べたカテゴリ。絞り込みの選択肢に出す。 */
   categories: Category[];
   categoryNames: ReadonlyMap<string, string>;
+  /** 絞り込みの選択肢に出す口座。名前順。 */
+  accounts: Account[];
   accountNames: ReadonlyMap<string, string>;
 };
 
@@ -84,12 +87,15 @@ function subtotalClass(subtotal: Yen): string {
 /**
  * 取引の一覧画面。1か月分の取引を日付の新しい順に、日ごとにまとめて出す。
  * 最初は今日の月を出し、前月・翌月のボタンで月を切り替える。
+ * 口座を選ぶと、その口座が関わる取引だけに絞り込む。月を切り替えても絞り込みは保つ。
  * 日ごとに収支の小計を添え、取引を押すと編集画面を開く。
  * カテゴリを選ぶと、そのカテゴリの取引だけを出す。選んだカテゴリは、月を切り替えても残す。
  */
 export function TransactionList({ dbName, today }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(today ?? toDateString(new Date())));
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  /** 絞り込む口座の id。空文字はすべての口座。 */
+  const [accountId, setAccountId] = useState('');
   /** 絞り込むカテゴリの id。空文字はすべてのカテゴリ。 */
   const [categoryId, setCategoryId] = useState('');
 
@@ -110,6 +116,7 @@ export function TransactionList({ dbName, today }: Props) {
         transactions: transactions.reverse(),
         categories,
         categoryNames: namesById(categories),
+        accounts,
         accountNames: namesById(accounts),
       });
     })();
@@ -186,22 +193,42 @@ export function TransactionList({ dbName, today }: Props) {
     );
   }
 
+  function accountFilter(accounts: readonly Account[]) {
+    return (
+      <div class="transaction-filter">
+        <label for="transaction-filter-account">口座</label>
+        <select
+          id="transaction-filter-account"
+          value={accountId}
+          onChange={(e) => setAccountId(e.currentTarget.value)}
+        >
+          <option value="">すべての口座</option>
+          {accounts.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.name}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
   function body() {
     if (!loaded || loaded.month !== month) return <p>読み込み中…</p>;
-    if (loaded.transactions.length === 0) {
-      return (
-        <p>
-          {monthLabel(month)}の取引はありません。
-          <a href={hashFromPath('/transactions/new')}>取引を入力する</a>
-        </p>
-      );
-    }
-    const transactions = filterByCategory(loaded.transactions, categoryId);
+    const byAccount =
+      accountId === ''
+        ? loaded.transactions
+        : filterTransactionsByAccount(loaded.transactions, accountId);
+    const transactions = filterByCategory(byAccount, categoryId);
     if (transactions.length === 0) {
-      const name = loaded.categoryNames.get(categoryId) ?? missingName;
+      let target = monthLabel(month);
+      if (accountId !== '') target += `の${loaded.accountNames.get(accountId) ?? missingName}`;
+      if (categoryId !== '')
+        target += `の「${loaded.categoryNames.get(categoryId) ?? missingName}」`;
       return (
         <p>
-          {monthLabel(month)}の「{name}」の取引はありません。
+          {target}の取引はありません。
+          {categoryId === '' && <a href={hashFromPath('/transactions/new')}>取引を入力する</a>}
         </p>
       );
     }
@@ -226,6 +253,7 @@ export function TransactionList({ dbName, today }: Props) {
           翌月
         </button>
       </nav>
+      {loaded && accountFilter(loaded.accounts)}
       {loaded && categoryFilter(loaded.categories)}
       {body()}
     </>

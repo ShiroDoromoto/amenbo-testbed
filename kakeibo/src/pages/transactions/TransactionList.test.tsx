@@ -329,3 +329,91 @@ test('選んだカテゴリは、月を切り替えても残す', async () => {
     expense.id,
   );
 });
+
+async function selectAccount(name: string) {
+  const select = await waitFor(() =>
+    document.querySelector<HTMLSelectElement>('#transaction-filter-account'),
+  );
+  const option = await waitFor(() => [...select.options].find((o) => o.textContent === name));
+  await act(() => {
+    select.value = option.value;
+    select.dispatchEvent(new Event('change'));
+  });
+}
+
+test('口座を選ぶと、その口座が関わる取引だけに絞り込み、振替は振替元と振替先の両方で出す', async () => {
+  const { lunch, salary, withdrawal } = await setup();
+  renderPage();
+  await days();
+
+  await selectAccount('現金');
+  await waitFor(async () => (await rows()).length === 2);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
+    `#/transactions/${lunch.id}`,
+    `#/transactions/${withdrawal.id}`,
+  ]);
+
+  await selectAccount('銀行');
+  await waitFor(
+    async () => (await rows())[0]?.getAttribute('href') === `#/transactions/${salary.id}`,
+  );
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
+    `#/transactions/${salary.id}`,
+    `#/transactions/${withdrawal.id}`,
+  ]);
+
+  await selectAccount('すべての口座');
+  await waitFor(async () => (await rows()).length === 3);
+});
+
+test('絞り込んだ口座の取引がその月に無ければ、月と口座の名前を添えてその旨を出す', async () => {
+  const db = await openKakeiboDB(testDbName);
+  await addAccount(db, { name: 'カード', type: 'card', initialBalance: 0 });
+  db.close();
+  await setup();
+  renderPage();
+  await days();
+
+  await selectAccount('カード');
+  expect((await emptyMessage()).textContent).toContain('2026年9月のカードの取引はありません');
+});
+
+test('月を切り替えても、口座の絞り込みを保つ', async () => {
+  const { bank, expense, lunch } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  await addTransaction(db, {
+    date: '2026-10-05',
+    amount: 100,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: bank.id,
+    memo: '',
+  });
+  db.close();
+  renderPage();
+  await days();
+  await selectAccount('現金');
+
+  await clickButton('翌月');
+  expect((await emptyMessage()).textContent).toContain('2026年10月の現金の取引はありません');
+
+  await clickButton('前月');
+  await waitFor(async () => (await rows()).length === 2);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toContain(`#/transactions/${lunch.id}`);
+});
+
+test('口座とカテゴリを両方選ぶと、どちらにも当てはまる取引だけを出す', async () => {
+  const { expense, income, lunch } = await setup();
+  renderPage();
+  await days();
+
+  await selectAccount('現金');
+  await selectCategory(expense.id);
+  await waitFor(async () => (await rows()).length === 1);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([`#/transactions/${lunch.id}`]);
+
+  await selectCategory(income.id);
+  expect((await emptyMessage()).textContent).toMatch(
+    /^2026年9月の現金の「.+」の取引はありません。$/,
+  );
+});
