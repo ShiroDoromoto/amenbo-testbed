@@ -80,3 +80,30 @@ test('無い取引の編集画面では、見つからない旨を出す', async
   await page.goto('/#/transactions/missing');
   await expect(page.getByRole('main').getByText('取引が見つかりません')).toBeVisible();
 });
+
+test('確認ダイアログで削除すると、取引が消えて取引の一覧に戻る', async ({ page }) => {
+  const id = await seedTransaction(page);
+  await page.goto(`/#/transactions/${id}`);
+  const main = page.getByRole('main');
+  await main.getByRole('button', { name: 'この取引を削除する' }).click();
+  const dialog = page.getByRole('alertdialog', { name: '取引を削除しますか？' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: '削除する' }).click();
+  await expect(page).toHaveURL(/#\/transactions$/);
+  await expect(page.getByText('削除しました')).toBeVisible();
+
+  await page.goto(`/#/transactions/${id}`);
+  await expect(main.getByText('取引が見つかりません')).toBeVisible();
+});
+
+test('スマホ幅でも、削除の確認ダイアログが横にはみ出さない', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  const id = await seedTransaction(page);
+  await page.goto(`/#/transactions/${id}`);
+  await page.getByRole('button', { name: 'この取引を削除する' }).click();
+  await expect(page.getByRole('alertdialog')).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(0);
+});
