@@ -24,6 +24,27 @@ export async function updateCategory(db: KakeiboDBConnection, category: Category
 }
 
 /**
+ * `ids` の並びどおりに、カテゴリの `order` を 0 から振り直す。1つのトランザクションで行う。
+ * `ids` に無いカテゴリの `order` は変えない。1つの収支区分のカテゴリを渡す。
+ * 無い id があれば、何も変えずに投げる。
+ */
+export async function reorderCategories(
+  db: KakeiboDBConnection,
+  ids: readonly string[],
+): Promise<void> {
+  const tx = db.transaction('categories', 'readwrite');
+  const categories = await Promise.all(ids.map((id) => tx.store.get(id)));
+  const missing = ids.find((_, i) => categories[i] === undefined);
+  if (missing !== undefined) {
+    tx.abort();
+    await tx.done.catch(() => {});
+    throw new Error(`Category not found: ${missing}`);
+  }
+  await Promise.all(categories.map((c, order) => tx.store.put({ ...c!, order })));
+  await tx.done;
+}
+
+/**
  * カテゴリを消す。id のカテゴリが無ければ何もしない。取引から参照されていても消す。
  * 使っている取引を別のカテゴリに付け替えるときは `deleteCategoryAndReassign` を使う。
  */

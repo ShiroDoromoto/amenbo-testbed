@@ -93,6 +93,36 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+.category-list-item-dragging {
+  position: relative;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+}
+
+/* 並べ替えのつまみ。タッチでドラッグしても画面をスクロールさせない */
+.category-drag-handle {
+  flex: none;
+  padding: var(--space-2);
+  font: inherit;
+  line-height: 1;
+  color: var(--color-text-muted);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  background: none;
+  border: none;
+}
+
+.category-list-item-dragging .category-drag-handle {
+  cursor: grabbing;
+}
+
+.category-reorder-hint {
+  max-width: 40rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
 .category-swatch {
   flex: none;
   width: var(--space-4);
