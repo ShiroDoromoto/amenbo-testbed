@@ -21,6 +21,7 @@ import {
 import { formatYen, type Yen } from '../../lib/money.ts';
 import { hashFromPath } from '../../router/index.ts';
 import { filterTransactionsByAccount } from './filterTransactionsByAccount.ts';
+import { filterTransactionsByMemo } from './filterTransactionsByMemo.ts';
 import { groupTransactionsByDate, type TransactionDay } from './groupTransactionsByDate.ts';
 import './transactionList.css';
 
@@ -108,6 +109,7 @@ function subtotalClass(subtotal: Yen): string {
  * 日ごとに収支の小計を添え、取引を押すと編集画面を開く。
  * 収支区分やカテゴリを選ぶと、その取引だけを出す。選んだものは、月を切り替えても残す。
  * 収支区分を選ぶと、カテゴリの選択肢はその区分のものだけにする。
+ * メモの検索欄にキーワードを入れると、メモにそのキーワードを含む取引だけを出す。月を切り替えてもキーワードは残す。
  */
 export function TransactionList({ dbName, today }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(today ?? toDateString(new Date())));
@@ -118,6 +120,8 @@ export function TransactionList({ dbName, today }: Props) {
   const [categoryId, setCategoryId] = useState('');
   /** 絞り込む収支区分。空文字はすべての区分。 */
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('');
+  /** メモを検索するキーワード。空文字は検索しない。 */
+  const [keyword, setKeyword] = useState('');
 
   useEffect(() => {
     const opening = openKakeiboDB(dbName);
@@ -260,22 +264,42 @@ export function TransactionList({ dbName, today }: Props) {
     return incomeExpenseLabels.find((g) => g.type === typeFilter)!.label;
   }
 
+  function memoSearch() {
+    return (
+      <div class="transaction-filter">
+        <label for="transaction-filter-memo">メモ</label>
+        <input
+          id="transaction-filter-memo"
+          type="search"
+          placeholder="キーワードで検索"
+          value={keyword}
+          onInput={(e) => setKeyword(e.currentTarget.value)}
+        />
+      </div>
+    );
+  }
+
   function body() {
     if (!loaded || loaded.month !== month) return <p>読み込み中…</p>;
     const byAccount =
       accountId === ''
         ? loaded.transactions
         : filterTransactionsByAccount(loaded.transactions, accountId);
-    const transactions = filterTransactions(byAccount, typeFilter, categoryId);
+    const transactions = filterTransactionsByMemo(
+      filterTransactions(byAccount, typeFilter, categoryId),
+      keyword,
+    );
     if (transactions.length === 0) {
       let target = monthLabel(month);
       if (accountId !== '') target += `の${loaded.accountNames.get(accountId) ?? missingName}`;
       if (categoryId !== '' || typeFilter !== '')
         target += `の「${filterName(loaded.categoryNames)}」`;
+      const searching = keyword.trim() !== '';
+      target += searching ? `で、メモに「${keyword.trim()}」を含む取引` : 'の取引';
       return (
         <p>
-          {target}の取引はありません。
-          {categoryId === '' && typeFilter === '' && (
+          {target}はありません。
+          {categoryId === '' && typeFilter === '' && !searching && (
             <a href={hashFromPath('/transactions/new')}>取引を入力する</a>
           )}
         </p>
@@ -303,6 +327,7 @@ export function TransactionList({ dbName, today }: Props) {
         </button>
       </nav>
       {loaded && filters(loaded.accounts, loaded.categories)}
+      {loaded && memoSearch()}
       {body()}
     </>
   );
