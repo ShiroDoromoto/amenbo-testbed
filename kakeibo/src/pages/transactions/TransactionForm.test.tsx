@@ -146,3 +146,67 @@ test('口座が無いときは渡さない', async () => {
   await submit(form);
   expect(onSubmit).not.toHaveBeenCalled();
 });
+
+function errorOf(form: HTMLFormElement, name: string): string | null {
+  const control = form.querySelector(`[name="${name}"]`)!;
+  const errorId = control.getAttribute('aria-describedby');
+  return errorId ? (document.getElementById(errorId)?.textContent ?? null) : null;
+}
+
+test('何も入れずに保存すると、金額とカテゴリにエラーを出し、金額の欄に移る', async () => {
+  const { form, field, onSubmit } = renderForm();
+  await submit(form);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(errorOf(form, 'amount')).toBe('金額を入れてください');
+  expect(errorOf(form, 'categoryId')).toBe('カテゴリを選んでください');
+  expect(errorOf(form, 'date')).toBeNull();
+  expect(errorOf(form, 'accountId')).toBeNull();
+  expect(field('amount').getAttribute('aria-invalid')).toBe('true');
+  expect(field('date').hasAttribute('aria-invalid')).toBe(false);
+  expect(document.activeElement).toBe(field('amount'));
+});
+
+test('日付を消して保存すると、日付にエラーを出す', async () => {
+  const { form, field, onSubmit } = renderForm();
+  await act(() => {
+    type(field('date'), '');
+    type(field('amount'), '500');
+    choose(field('categoryId'), 'food');
+  });
+  await submit(form);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(errorOf(form, 'date')).toBe('日付を入れてください');
+  expect(document.activeElement).toBe(field('date'));
+});
+
+test('金額が正でなければ、そのことをエラーで出す', async () => {
+  const { form, field } = renderForm();
+  await act(() => {
+    type(field('amount'), '0');
+    choose(field('categoryId'), 'food');
+  });
+  await submit(form);
+  expect(errorOf(form, 'amount')).toBe('金額は1円以上にしてください');
+});
+
+test('エラーを出したあと、欄を直すとその欄のエラーが消える', async () => {
+  const { form, field } = renderForm();
+  await submit(form);
+  await act(() => {
+    type(field('amount'), '500');
+  });
+  expect(errorOf(form, 'amount')).toBeNull();
+  expect(errorOf(form, 'categoryId')).toBe('カテゴリを選んでください');
+  await act(() => {
+    choose(field('categoryId'), 'food');
+  });
+  expect(errorOf(form, 'categoryId')).toBeNull();
+});
+
+test('保存を押すまでは、エラーを出さない', async () => {
+  const { form, field } = renderForm();
+  await act(() => {
+    type(field('amount'), 'abc');
+  });
+  expect(form.querySelector('.transaction-form-error')).toBeNull();
+});

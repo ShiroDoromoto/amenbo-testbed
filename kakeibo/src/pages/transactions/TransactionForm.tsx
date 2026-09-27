@@ -1,15 +1,24 @@
-import { useState } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
+import { useId, useRef, useState } from 'preact/hooks';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
 import type { IncomeExpenseType } from '../../domain/transaction.ts';
 import type { NewTransaction } from '../../db/repositories/transactions.ts';
-import { parseYen } from '../../lib/money.ts';
+import {
+  validateTransactionInput,
+  type TransactionInput,
+  type TransactionInputErrors,
+  type TransactionInputField,
+} from './validateTransactionInput.ts';
 import './transactionForm.css';
 
 const typeLabels: Record<IncomeExpenseType, string> = {
   expense: '支出',
   income: '収入',
 };
+
+/** 画面に並ぶ順。保存できなかったとき、この順で最初にエラーのある欄に移る。 */
+const fieldOrder: readonly TransactionInputField[] = ['date', 'amount', 'categoryId', 'accountId'];
 
 type Props = {
   categories: readonly Category[];
@@ -19,39 +28,83 @@ type Props = {
   onSubmit: (transaction: NewTransaction) => void | Promise<void>;
 };
 
-/** 取引を1件入力するフォーム。保存は `onSubmit` に任せる。 */
+/** 取引を1件入力するフォーム。入力を確かめ、通ったものだけを `onSubmit` に渡す。 */
 export function TransactionForm({ categories, accounts, initialDate, onSubmit }: Props) {
-  const [date, setDate] = useState(initialDate);
+  const [input, setInput] = useState<TransactionInput>({
+    date: initialDate,
+    amount: '',
+    categoryId: '',
+    accountId: accounts[0]?.id ?? '',
+  });
   const [type, setType] = useState<IncomeExpenseType>('expense');
-  const [amount, setAmount] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? '');
   const [memo, setMemo] = useState('');
   const [saving, setSaving] = useState(false);
+  // 保存を押すまではエラーを出さない。押したあとは入力を変えるたびに確かめ直し、直した欄のエラーを消す。
+  const [submitted, setSubmitted] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const id = useId();
   const typeCategories = categories.filter((c) => c.type === type);
+
+  const validation = validateTransactionInput(input);
+  const errors: TransactionInputErrors = submitted && !validation.ok ? validation.errors : {};
+
+  function update(field: TransactionInputField, value: string) {
+    setInput((prev) => ({ ...prev, [field]: value }));
+  }
 
   function changeType(value: IncomeExpenseType) {
     setType(value);
     // カテゴリはどちらか一方の収支区分に属するので、区分を変えたら選び直してもらう。
-    setCategoryId('');
+    update('categoryId', '');
   }
 
   async function handleSubmit(event: Event) {
     event.preventDefault();
-    const yen = parseYen(amount);
-    // 金額が読めないか正でないとき、カテゴリか口座が空のときは保存しない。
-    // エラーの表示は入力チェックで足す。
-    if (yen === null || yen <= 0 || !categoryId || !accountId || saving) return;
+    if (saving) return;
+    setSubmitted(true);
+    if (!validation.ok) {
+      const first = fieldOrder.find((field) => validation.errors[field] !== undefined);
+      formRef.current?.querySelector<HTMLElement>(`[name="${first}"]`)?.focus();
+      return;
+    }
     setSaving(true);
     try {
-      await onSubmit({ date, amount: yen, type, categoryId, accountId, memo: memo.trim() });
+      await onSubmit({ ...validation.value, type, memo: memo.trim() });
     } finally {
       setSaving(false);
     }
   }
 
+  /** 入力欄に付ける属性。エラーがあれば、読み上げでもエラーが伝わるようにする。 */
+  function controlProps(field: TransactionInputField) {
+    const invalid = errors[field] !== undefined;
+    return {
+      id: `${id}-${field}`,
+      name: field,
+      required: true,
+      'aria-invalid': invalid || undefined,
+      'aria-describedby': invalid ? `${id}-${field}-error` : undefined,
+    };
+  }
+
+  /** ラベル・入力欄・エラーメッセージを1つの欄にまとめる。 */
+  function field(name: TransactionInputField, label: string, control: ComponentChildren) {
+    return (
+      <div class="transaction-form-field">
+        <label for={`${id}-${name}`}>{label}</label>
+        {control}
+        {errors[name] !== undefined && (
+          <p class="transaction-form-error" id={`${id}-${name}-error`}>
+            {errors[name]}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <form class="transaction-form" onSubmit={handleSubmit}>
+    // 必須や形式の確かめはブラウザに任せず、自前のメッセージで出す。
+    <form class="transaction-form" ref={formRef} noValidate onSubmit={handleSubmit}>
       <fieldset class="transaction-form-type">
         <legend>収支</legend>
         {(Object.keys(typeLabels) as IncomeExpenseType[]).map((value) => (
@@ -68,37 +121,37 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
         ))}
       </fieldset>
 
-      <label class="transaction-form-field">
-        日付
+      {field(
+        'date',
+        '日付',
         <input
+          {...controlProps('date')}
           type="date"
-          name="date"
-          required
-          value={date}
-          onInput={(e) => setDate(e.currentTarget.value)}
-        />
-      </label>
+          value={input.date}
+          onInput={(e) => update('date', e.currentTarget.value)}
+        />,
+      )}
 
-      <label class="transaction-form-field">
-        金額（円）
+      {field(
+        'amount',
+        '金額（円）',
         <input
+          {...controlProps('amount')}
           type="text"
-          name="amount"
           inputMode="numeric"
           autoComplete="off"
-          required
-          value={amount}
-          onInput={(e) => setAmount(e.currentTarget.value)}
-        />
-      </label>
+          value={input.amount}
+          onInput={(e) => update('amount', e.currentTarget.value)}
+        />,
+      )}
 
-      <label class="transaction-form-field">
-        カテゴリ
+      {field(
+        'categoryId',
+        'カテゴリ',
         <select
-          name="categoryId"
-          required
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.currentTarget.value)}
+          {...controlProps('categoryId')}
+          value={input.categoryId}
+          onChange={(e) => update('categoryId', e.currentTarget.value)}
         >
           <option value="">選んでください</option>
           {typeCategories.map((c) => (
@@ -106,16 +159,16 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
               {c.name}
             </option>
           ))}
-        </select>
-      </label>
+        </select>,
+      )}
 
-      <label class="transaction-form-field">
-        口座
+      {field(
+        'accountId',
+        '口座',
         <select
-          name="accountId"
-          required
-          value={accountId}
-          onChange={(e) => setAccountId(e.currentTarget.value)}
+          {...controlProps('accountId')}
+          value={input.accountId}
+          onChange={(e) => update('accountId', e.currentTarget.value)}
         >
           {accounts.length === 0 && <option value="">口座がありません</option>}
           {accounts.map((a) => (
@@ -123,18 +176,19 @@ export function TransactionForm({ categories, accounts, initialDate, onSubmit }:
               {a.name}
             </option>
           ))}
-        </select>
-      </label>
+        </select>,
+      )}
 
-      <label class="transaction-form-field">
-        メモ
+      <div class="transaction-form-field">
+        <label for={`${id}-memo`}>メモ</label>
         <input
+          id={`${id}-memo`}
           type="text"
           name="memo"
           value={memo}
           onInput={(e) => setMemo(e.currentTarget.value)}
         />
-      </label>
+      </div>
 
       <button class="transaction-form-submit" type="submit" disabled={saving}>
         保存する

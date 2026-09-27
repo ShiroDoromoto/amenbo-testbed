@@ -19,3 +19,12 @@ test('スマホ幅でも、フォームが横にはみ出さない', async ({ pa
   );
   expect(overflow).toBe(0);
 });
+
+test('何も入れずに保存すると、欄の下にエラーが出る', async ({ page }) => {
+  await page.goto('/#/transactions/new');
+  const main = page.getByRole('main');
+  await main.getByRole('button', { name: '保存する' }).click();
+  await expect(main.getByText('金額を入れてください')).toBeVisible();
+  await expect(main.getByText('カテゴリを選んでください')).toBeVisible();
+  await expect(main.getByLabel('金額（円）')).toBeFocused();
+});
