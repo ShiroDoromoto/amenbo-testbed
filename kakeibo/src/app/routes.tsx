@@ -2,9 +2,11 @@ import type { ComponentChildren } from 'preact';
 import { pathFromHash, type Route } from '../router/index.ts';
 import { EditTransactionPage } from '../pages/transactions/EditTransactionPage.tsx';
 import { NewTransactionPage } from '../pages/transactions/NewTransactionPage.tsx';
+import { TransactionList } from '../pages/transactions/TransactionList.tsx';
 import { navItems } from './navItems.ts';
 
 const pages: Readonly<Record<string, () => ComponentChildren>> = {
+  '/transactions': () => <TransactionList />,
   '/transactions/new': () => <NewTransactionPage />,
 };
 
