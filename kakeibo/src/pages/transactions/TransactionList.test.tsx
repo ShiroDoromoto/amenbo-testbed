@@ -28,8 +28,8 @@ async function waitFor<T>(
   throw new Error('待っても出てこなかった');
 }
 
-function renderPage(today = '2026-09-28') {
-  render(<TransactionList dbName={testDbName} today={today} />, document.body);
+function renderPage(today = '2026-09-28', pageSize?: number) {
+  render(<TransactionList dbName={testDbName} today={today} pageSize={pageSize} />, document.body);
 }
 
 function monthLabel() {
@@ -807,4 +807,108 @@ test('金額の範囲は、月を切り替えても残す', async () => {
   expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
     `#/transactions/${dinner.id}`,
   ]);
+});
+
+function pagerLabel() {
+  return document.querySelector('.transaction-pager-label')?.textContent;
+}
+
+function pagerButton(name: string) {
+  return [...document.querySelectorAll<HTMLButtonElement>('.transaction-pager button')].find(
+    (b) => b.textContent === name,
+  )!;
+}
+
+test('取引が1ページに収まれば、ページ送りを出さない', async () => {
+  await setup();
+  renderPage('2026-09-28', 3);
+  await days();
+
+  expect(document.querySelector('.transaction-pager')).toBeNull();
+});
+
+test('取引が pageSize 件を超えたら、ページに分けて出し、前へ・次へでページを送る', async () => {
+  const { lunch, salary, withdrawal } = await setup();
+  renderPage('2026-09-28', 2);
+
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
+    `#/transactions/${salary.id}`,
+    `#/transactions/${lunch.id}`,
+  ]);
+  expect(pagerLabel()).toBe('1 / 2ページ（3件中 1〜2件目）');
+  expect(pagerButton('前へ').disabled).toBe(true);
+
+  await act(() => pagerButton('次へ').click());
+  await waitFor(() => pagerLabel() === '2 / 2ページ（3件中 3〜3件目）');
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
+    `#/transactions/${withdrawal.id}`,
+  ]);
+  expect(pagerButton('次へ').disabled).toBe(true);
+
+  await act(() => pagerButton('前へ').click());
+  await waitFor(() => pagerLabel() === '1 / 2ページ（3件中 1〜2件目）');
+});
+
+test('日がページをまたいでも、小計はその日の取引すべてで出す', async () => {
+  const { cash, expense } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  await addTransaction(db, {
+    date: '2026-09-10',
+    amount: 400,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: '',
+  });
+  db.close();
+  renderPage('2026-09-28', 2);
+  const found = await days();
+
+  expect(found.map((d) => ({ date: d.date, subtotal: d.subtotal, count: d.links.length }))).toEqual(
+    [
+      { date: '2026-09-25', subtotal: '小計+250,000円', count: 1 },
+      { date: '2026-09-10', subtotal: '小計-1,200円', count: 1 },
+    ],
+  );
+});
+
+test('金額の順に並べても、ページに分けて出す', async () => {
+  const { lunch, salary, withdrawal } = await setup();
+  renderPage('2026-09-28', 2);
+  await days();
+
+  const select = document.querySelector<HTMLSelectElement>('#transaction-sort')!;
+  await act(() => {
+    select.value = 'amount-desc';
+    select.dispatchEvent(new Event('change'));
+  });
+  await waitFor(
+    async () => (await rows())[0]?.getAttribute('href') === `#/transactions/${salary.id}`,
+  );
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
+    `#/transactions/${salary.id}`,
+    `#/transactions/${withdrawal.id}`,
+  ]);
+
+  await act(() => pagerButton('次へ').click());
+  await waitFor(async () => (await rows()).length === 1);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([`#/transactions/${lunch.id}`]);
+});
+
+test('絞り込みや月を変えたら、最初のページに戻す', async () => {
+  await setup();
+  renderPage('2026-09-28', 2);
+  await days();
+
+  await act(() => pagerButton('次へ').click());
+  await waitFor(() => pagerLabel() === '2 / 2ページ（3件中 3〜3件目）');
+
+  await enterAmount('金額の下限', '0');
+  await waitFor(() => pagerLabel() === '1 / 2ページ（3件中 1〜2件目）');
+
+  await act(() => pagerButton('次へ').click());
+  await waitFor(() => pagerLabel() === '2 / 2ページ（3件中 3〜3件目）');
+  await clickButton('翌月');
+  await clickButton('前月');
+  await waitFor(() => pagerLabel() === '1 / 2ページ（3件中 1〜2件目）');
 });

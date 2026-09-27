@@ -5,12 +5,15 @@ test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-09-28T12:00:00'));
 });
 
-/** アプリに DB を作らせてから、口座と支出の取引を2件、直に入れる。 */
-async function seedTransactions(page: Page): Promise<void> {
+/**
+ * アプリに DB を作らせてから、口座と支出の取引を2件、直に入れる。
+ * `extra` を渡すと、2026-09-01 の支出の取引をその件数だけ足す。
+ */
+async function seedTransactions(page: Page, extra = 0): Promise<void> {
   await page.goto('/#/transactions/new');
   await expect(page.getByRole('main').getByLabel('カテゴリ')).toBeVisible();
   await page.evaluate(
-    () =>
+    (extra) =>
       new Promise<void>((resolve, reject) => {
         const request = indexedDB.open('kakeibo');
         request.onerror = () => reject(request.error);
@@ -47,6 +50,17 @@ async function seedTransactions(page: Page): Promise<void> {
               accountId: 'e2e-cash',
               memo: '長いメモ'.repeat(30),
             });
+            for (let i = 0; i < extra; i++) {
+              transactions.put({
+                id: `e2e-extra-${i}`,
+                date: '2026-09-01',
+                amount: 100,
+                type: 'expense',
+                categoryId: category.id,
+                accountId: 'e2e-cash',
+                memo: '',
+              });
+            }
           };
           tx.oncomplete = () => {
             db.close();
@@ -55,6 +69,7 @@ async function seedTransactions(page: Page): Promise<void> {
           tx.onerror = () => reject(tx.error);
         };
       }),
+    extra,
   );
 }
 
@@ -207,6 +222,28 @@ test('スマホ幅でも、取引の一覧と月の切り替え、口座・収�
   await expect(page.getByRole('main').getByLabel('並び順')).toBeInViewport();
   await page.getByRole('main').getByLabel('並び順').selectOption({ label: '金額の大きい順' });
   await expect(page.getByRole('main').locator('.transaction-list-date')).toHaveCount(2);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(0);
+});
+
+test('取引が50件を超えたら、スマホ幅でもページ送りが横にはみ出さずに出る', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await seedTransactions(page, 60);
+  await page.goto('/#/transactions');
+  const main = page.getByRole('main');
+  const pager = main.getByRole('navigation', { name: 'ページ送り' });
+  await expect(main.locator('.transaction-list').getByRole('listitem')).toHaveCount(50);
+  await expect(pager).toContainText('1 / 2ページ（62件中 1〜50件目）');
+
+  await pager.getByRole('button', { name: '次へ' }).click();
+  await expect(main.locator('.transaction-list').getByRole('listitem')).toHaveCount(12);
+  await expect(pager).toContainText('2 / 2ページ（62件中 51〜62件目）');
+  await expect(pager.getByRole('button', { name: '次へ' })).toBeDisabled();
+  await pager.scrollIntoViewIfNeeded();
+  await expect(pager.getByRole('button', { name: '前へ' })).toBeInViewport();
+  await expect(pager.getByRole('button', { name: '次へ' })).toBeInViewport();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
