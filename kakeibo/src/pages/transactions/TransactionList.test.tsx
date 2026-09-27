@@ -76,17 +76,54 @@ async function setup() {
   return { cash, bank, expense, income, lunch, salary, withdrawal };
 }
 
-test('取引を日付の新しい順に並べ、それぞれ編集画面へのリンクにする', async () => {
+async function days() {
+  const list = await waitFor(() => document.querySelector('.transaction-list'));
+  return [...list.querySelectorAll<HTMLElement>('.transaction-day')].map((day) => ({
+    date: day.querySelector('.transaction-day-date')?.textContent,
+    subtotal: day.querySelector('.transaction-day-subtotal')?.textContent,
+    links: [...day.querySelectorAll('a')].map((a) => a.getAttribute('href')),
+  }));
+}
+
+test('取引を日付の新しい順に日ごとにまとめ、それぞれ編集画面へのリンクにする', async () => {
   const { lunch, salary, withdrawal } = await setup();
   renderPage();
-  const links = await rows();
 
-  expect(links.map((a) => text(a, 'date'))).toEqual(['2026-09-25', '2026-09-10', '2026-09-01']);
-  expect(links.map((a) => a.getAttribute('href'))).toEqual([
-    `#/transactions/${salary.id}`,
-    `#/transactions/${lunch.id}`,
-    `#/transactions/${withdrawal.id}`,
+  expect((await days()).map(({ date, links }) => ({ date, links }))).toEqual([
+    { date: '2026-09-25', links: [`#/transactions/${salary.id}`] },
+    { date: '2026-09-10', links: [`#/transactions/${lunch.id}`] },
+    { date: '2026-09-01', links: [`#/transactions/${withdrawal.id}`] },
   ]);
+});
+
+test('同じ日の取引は1つにまとめ、日ごとに収入から支出を引いた小計を出す', async () => {
+  const { cash, bank, expense, lunch } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  const coffee = await addTransaction(db, {
+    date: '2026-09-10',
+    amount: 400,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: '',
+  });
+  await addTransaction(db, {
+    date: '2026-09-10',
+    amount: 10000,
+    type: 'transfer',
+    accountId: bank.id,
+    toAccountId: cash.id,
+    memo: '',
+  });
+  db.close();
+  renderPage();
+  const found = await days();
+
+  expect(found.map((d) => d.subtotal)).toEqual(['小計+250,000円', '小計-1,200円', '小計0円']);
+  expect(found[1]!.links).toHaveLength(3);
+  expect(found[1]!.links).toEqual(
+    expect.arrayContaining([`#/transactions/${lunch.id}`, `#/transactions/${coffee.id}`]),
+  );
 });
 
 test('収入・支出はカテゴリと口座を、振替は振替元と振替先を出す', async () => {
