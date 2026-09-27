@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
-import { isTransfer, type Transaction } from '../../domain/transaction.ts';
+import type { Transaction } from '../../domain/transaction.ts';
 import { ConfirmDialog } from '../../components/ConfirmDialog/index.ts';
 import { useToast } from '../../components/Toast/index.ts';
 import { openKakeiboDB, type KakeiboDBConnection } from '../../db/index.ts';
@@ -82,8 +82,6 @@ export function EditTransactionPage({ id, dbName }: Props) {
   }
 
   function form({ categories, accounts }: Loaded, transaction: Transaction) {
-    // 入力フォームはまだ振替を扱えない。
-    if (isTransfer(transaction)) return <p>振替の取引は、まだ編集できません。</p>;
     return (
       <TransactionForm
         categories={categories}
@@ -101,7 +99,6 @@ export function EditTransactionPage({ id, dbName }: Props) {
     return (
       <>
         {form(loaded, transaction)}
-        {/* 振替はまだ編集できないが、削除はできる。 */}
         <button type="button" class="edit-transaction-delete" onClick={() => setConfirming(true)}>
           この取引を削除する
         </button>

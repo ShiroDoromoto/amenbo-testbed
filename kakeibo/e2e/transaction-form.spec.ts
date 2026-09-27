@@ -28,3 +28,17 @@ test('何も入れずに保存すると、欄の下にエラーが出る', async
   await expect(main.getByText('カテゴリを選んでください')).toBeVisible();
   await expect(main.getByLabel('金額（円）')).toBeFocused();
 });
+
+test('振替を選ぶと、振替元と振替先の口座の欄が出て、スマホ幅でもはみ出さない', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto('/#/transactions/new');
+  const main = page.getByRole('main');
+  await main.getByLabel('振替').check();
+  await expect(main.getByLabel('振替元の口座')).toBeVisible();
+  await expect(main.getByLabel('振替先の口座')).toBeVisible();
+  await expect(main.getByLabel('カテゴリ')).toHaveCount(0);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(0);
+});
