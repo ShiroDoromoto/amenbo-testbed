@@ -156,7 +156,7 @@ test('一覧の取引を押すと、その取引の編集画面が開く', async
   await expect(page.getByRole('main').getByLabel('メモ')).toHaveValue('ランチ');
 });
 
-test('スマホ幅でも、取引の一覧と月の切り替え、口座とカテゴリの絞り込みが横にはみ出さない', async ({
+test('スマホ幅でも、取引の一覧と月の切り替え、口座とカテゴリの絞り込み、メモの検索が横にはみ出さない', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 667 });
@@ -166,6 +166,7 @@ test('スマホ幅でも、取引の一覧と月の切り替え、口座とカ�
   await expect(page.getByRole('button', { name: '翌月' })).toBeInViewport();
   await expect(page.getByRole('main').getByLabel('口座')).toBeInViewport();
   await expect(page.getByRole('main').getByLabel('カテゴリ')).toBeInViewport();
+  await expect(page.getByRole('main').getByLabel('メモ')).toBeInViewport();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
