@@ -54,6 +54,11 @@ export async function deleteTransaction(db: KakeiboDBConnection, id: string): Pr
   await db.delete('transactions', id);
 }
 
+/** すべての取引を返す。順は決めない。 */
+export async function listTransactions(db: KakeiboDBConnection): Promise<Transaction[]> {
+  return db.getAll('transactions');
+}
+
 /**
  * `from` から `to` までの取引を、両端を含めて日付の古い順に返す。
  * 日付は `YYYY-MM-DD` で渡す。同じ日付の中の順は決めない。

@@ -6,7 +6,7 @@
   border-top: 1px solid var(--color-border);
 }
 
-/* 1行目に名前と初期残高、2行目に種類を出す */
+/* 1行目に名前と現在の残高、2行目に種類を出す */
 .account-list-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
