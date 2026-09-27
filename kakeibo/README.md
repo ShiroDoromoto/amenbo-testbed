@@ -49,6 +49,27 @@ toast.show('保存できませんでした', { kind: 'error', duration: 0 });
 `kind` は `info`（既定）・`success`・`error`。`error` は `role="alert"`、ほかは `role="status"` で出す。
 `duration` はミリ秒で、既定は 4000。0 にすると、閉じるボタンを押すか `dismiss(id)` を呼ぶまで残る。
 
+## 確認ダイアログ
+
+操作の前に確かめるときは、`src/components/ConfirmDialog/` の `ConfirmDialog` を出す。開くかどうかは、呼ぶ側が `open` で決める。
+
+```tsx
+<ConfirmDialog
+  open={confirming}
+  title="取引を削除しますか？"
+  confirmLabel="削除する"
+  danger
+  onConfirm={remove}
+  onCancel={() => setConfirming(false)}
+>
+  <p>この操作は取り消せません。</p>
+</ConfirmDialog>
+```
+
+ボタンの文言は、既定で「キャンセル」と「OK」。`danger` を付けると、確定ボタンを `--color-danger` の色にする。
+キャンセルボタン・Escape キー・背景のクリックで `onCancel` を呼ぶ。
+開くとキャンセルボタンにフォーカスを置き、閉じると開く前にフォーカスがあった場所へ戻す。
+
 ## データのスキーマを変える
 
 データは IndexedDB に置く（`src/db/`）。スキーマのバージョンは、`src/db/migrations/` にある移行の数で決まる。
