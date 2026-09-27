@@ -1,14 +1,14 @@
 import 'fake-indexeddb/auto';
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { deleteDB } from 'idb';
 import { ToastProvider } from '../../components/Toast/index.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { addAccount } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
 import { addTransaction, getTransaction } from '../../db/repositories/transactions.ts';
-import { EditTransactionPage } from './EditTransactionPage.tsx';
+import { EditTransactionPage, UNDO_DELETE_DURATION } from './EditTransactionPage.tsx';
 
 const testDbName = 'kakeibo-edit-transaction-page-test';
 
@@ -198,7 +198,14 @@ test('確認ダイアログで削除すると、取引を消して取引の一�
   expect(document.body.textContent).toContain('削除しました');
 });
 
-test('振替の取引も削除できる', async () => {
+async function deleteFromDialog() {
+  const open = await waitFor(() => button('この取引を削除する'));
+  await act(() => open.click());
+  await act(() => button('削除する')!.click());
+  await waitFor(() => window.location.hash === '#/transactions');
+}
+
+test('振替の取引も削除でき、「元に戻す」で同じ取引に戻せる', async () => {
   const { cash, bank } = await setup();
   const db = await openKakeiboDB(testDbName);
   const transfer = await addTransaction(db, {
@@ -212,12 +219,57 @@ test('振替の取引も削除できる', async () => {
   db.close();
 
   renderPage(transfer.id);
+  await deleteFromDialog();
+
+  const deleted = await openKakeiboDB(testDbName);
+  expect(await getTransaction(deleted, transfer.id)).toBeUndefined();
+  deleted.close();
+
+  await act(() => button('元に戻す')!.click());
+  await waitFor(() => window.location.hash === `#/transactions/${transfer.id}`);
+  const restored = await openKakeiboDB(testDbName);
+  expect(await getTransaction(restored, transfer.id)).toEqual(transfer);
+  restored.close();
+});
+
+test('削除のあと「元に戻す」を押すと、同じ取引を入れ直して編集画面に戻る', async () => {
+  const { transaction } = await setup();
+  renderPage(transaction.id);
+  await deleteFromDialog();
+
+  await act(() => button('元に戻す')!.click());
+  await waitFor(() => window.location.hash === `#/transactions/${transaction.id}`);
+  const check = await openKakeiboDB(testDbName);
+  expect(await getTransaction(check, transaction.id)).toEqual(transaction);
+  check.close();
+  expect(document.body.textContent).toContain('元に戻しました');
+  expect(button('元に戻す')).toBeUndefined();
+});
+
+test('削除から5秒たつと「元に戻す」は消える', async () => {
+  const { transaction } = await setup();
+  renderPage(transaction.id);
   const open = await waitFor(() => button('この取引を削除する'));
   await act(() => open.click());
-  await act(() => button('削除する')!.click());
 
-  await waitFor(() => window.location.hash === '#/transactions');
-  const check = await openKakeiboDB(testDbName);
-  expect(await getTransaction(check, transfer.id)).toBeUndefined();
-  check.close();
+  // 削除を押してからの時間を測るので、ここで setTimeout を差し替える。待つのには元の setTimeout を使う。
+  const realSetTimeout = setTimeout;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    await act(() => button('削除する')!.click());
+    for (let i = 0; i < 100 && !button('元に戻す'); i++) {
+      await act(() => new Promise((resolve) => realSetTimeout(resolve, 10)));
+    }
+    expect(button('元に戻す')).toBeDefined();
+    act(() => {
+      vi.advanceTimersByTime(UNDO_DELETE_DURATION - 1);
+    });
+    expect(button('元に戻す')).toBeDefined();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(button('元に戻す')).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
 });
