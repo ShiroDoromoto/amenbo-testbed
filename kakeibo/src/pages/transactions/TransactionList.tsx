@@ -18,9 +18,10 @@ import {
   toDateString,
   type DateString,
 } from '../../lib/date.ts';
-import { formatYen, type Yen } from '../../lib/money.ts';
+import { formatYen, parseYen, type Yen } from '../../lib/money.ts';
 import { hashFromPath } from '../../router/index.ts';
 import { filterTransactionsByAccount } from './filterTransactionsByAccount.ts';
+import { filterTransactionsByAmount } from './filterTransactionsByAmount.ts';
 import { filterTransactionsByMemo } from './filterTransactionsByMemo.ts';
 import { groupTransactionsByDate, type TransactionDay } from './groupTransactionsByDate.ts';
 import './transactionList.css';
@@ -96,6 +97,17 @@ function filterTransactions(
   );
 }
 
+/** 金額の範囲の入力を読む。空なら `null`、円の整数に直せなければ `'invalid'` を返す。 */
+function parseAmountBound(input: string): Yen | null | 'invalid' {
+  if (input.trim() === '') return null;
+  return parseYen(input) ?? 'invalid';
+}
+
+/** 絞り込んだ金額の範囲の言い方。例：`1,000円以上5,000円以下`。 */
+function amountRangeLabel(min: Yen | null, max: Yen | null): string {
+  return `${min === null ? '' : `${formatYen(min)}以上`}${max === null ? '' : `${formatYen(max)}以下`}`;
+}
+
 function subtotalClass(subtotal: Yen): string {
   if (subtotal > 0) return 'transaction-day-subtotal transaction-day-subtotal-income';
   if (subtotal < 0) return 'transaction-day-subtotal transaction-day-subtotal-expense';
@@ -110,6 +122,7 @@ function subtotalClass(subtotal: Yen): string {
  * 収支区分やカテゴリを選ぶと、その取引だけを出す。選んだものは、月を切り替えても残す。
  * 収支区分を選ぶと、カテゴリの選択肢はその区分のものだけにする。
  * メモの検索欄にキーワードを入れると、メモにそのキーワードを含む取引だけを出す。月を切り替えてもキーワードは残す。
+ * 金額の下限・上限を入れると、その範囲（両端を含む）の取引だけを出す。整数に直せない入力は、その端を絞り込まない。
  */
 export function TransactionList({ dbName, today }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(today ?? toDateString(new Date())));
@@ -122,6 +135,11 @@ export function TransactionList({ dbName, today }: Props) {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('');
   /** メモを検索するキーワード。空文字は検索しない。 */
   const [keyword, setKeyword] = useState('');
+  /** 金額の下限と上限の入力。空文字はその端を絞り込まない。 */
+  const [minAmountInput, setMinAmountInput] = useState('');
+  const [maxAmountInput, setMaxAmountInput] = useState('');
+  const minAmount = parseAmountBound(minAmountInput);
+  const maxAmount = parseAmountBound(maxAmountInput);
 
   useEffect(() => {
     const opening = openKakeiboDB(dbName);
@@ -279,15 +297,45 @@ export function TransactionList({ dbName, today }: Props) {
     );
   }
 
+  function amountRange() {
+    return (
+      <div class="transaction-filter transaction-filter-amount" role="group" aria-label="金額">
+        <span>金額</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          aria-label="金額の下限"
+          placeholder="下限"
+          value={minAmountInput}
+          aria-invalid={minAmount === 'invalid'}
+          onInput={(e) => setMinAmountInput(e.currentTarget.value)}
+        />
+        <span aria-hidden="true">〜</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          aria-label="金額の上限"
+          placeholder="上限"
+          value={maxAmountInput}
+          aria-invalid={maxAmount === 'invalid'}
+          onInput={(e) => setMaxAmountInput(e.currentTarget.value)}
+        />
+      </div>
+    );
+  }
+
   function body() {
     if (!loaded || loaded.month !== month) return <p>読み込み中…</p>;
     const byAccount =
       accountId === ''
         ? loaded.transactions
         : filterTransactionsByAccount(loaded.transactions, accountId);
-    const transactions = filterTransactionsByMemo(
-      filterTransactions(byAccount, typeFilter, categoryId),
-      keyword,
+    const min = minAmount === 'invalid' ? null : minAmount;
+    const max = maxAmount === 'invalid' ? null : maxAmount;
+    const transactions = filterTransactionsByAmount(
+      filterTransactionsByMemo(filterTransactions(byAccount, typeFilter, categoryId), keyword),
+      min,
+      max,
     );
     if (transactions.length === 0) {
       let target = monthLabel(month);
@@ -295,11 +343,17 @@ export function TransactionList({ dbName, today }: Props) {
       if (categoryId !== '' || typeFilter !== '')
         target += `の「${filterName(loaded.categoryNames)}」`;
       const searching = keyword.trim() !== '';
-      target += searching ? `で、メモに「${keyword.trim()}」を含む取引` : 'の取引';
+      const byAmount = min !== null || max !== null;
+      const memo = `メモに「${keyword.trim()}」を含`;
+      const amount = `金額が${amountRangeLabel(min, max)}の`;
+      if (searching && byAmount) target += `で、${memo}み、${amount}取引`;
+      else if (searching) target += `で、${memo}む取引`;
+      else if (byAmount) target += `で、${amount}取引`;
+      else target += 'の取引';
       return (
         <p>
           {target}はありません。
-          {categoryId === '' && typeFilter === '' && !searching && (
+          {categoryId === '' && typeFilter === '' && !searching && !byAmount && (
             <a href={hashFromPath('/transactions/new')}>取引を入力する</a>
           )}
         </p>
@@ -328,6 +382,7 @@ export function TransactionList({ dbName, today }: Props) {
       </nav>
       {loaded && filters(loaded.accounts, loaded.categories)}
       {loaded && memoSearch()}
+      {loaded && amountRange()}
       {body()}
     </>
   );

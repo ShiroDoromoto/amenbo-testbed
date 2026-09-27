@@ -604,3 +604,97 @@ test('メモのキーワードは、月を切り替えても残す', async () =>
     'ランチ',
   );
 });
+
+async function enterAmount(name: '金額の下限' | '金額の上限', value: string) {
+  const input = await waitFor(() =>
+    document.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`),
+  );
+  await act(() => {
+    input.value = value;
+    input.dispatchEvent(new Event('input'));
+  });
+  return input;
+}
+
+test('金額の下限と上限を入れると、その範囲（両端を含む）の取引だけを出す', async () => {
+  const { lunch, withdrawal } = await setup();
+  renderPage();
+  await days();
+
+  await enterAmount('金額の下限', '800');
+  await enterAmount('金額の上限', '30,000');
+  await waitFor(async () => (await rows()).length === 2);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
+    `#/transactions/${lunch.id}`,
+    `#/transactions/${withdrawal.id}`,
+  ]);
+
+  await enterAmount('金額の下限', '');
+  await enterAmount('金額の上限', '');
+  await waitFor(async () => (await rows()).length === 3);
+});
+
+test('金額に整数でない値を入れると、その端では絞り込まず、入力欄に印を付ける', async () => {
+  await setup();
+  renderPage();
+  await days();
+
+  await enterAmount('金額の上限', '1000');
+  await waitFor(async () => (await rows()).length === 1);
+
+  const input = await enterAmount('金額の上限', 'abc');
+  await waitFor(async () => (await rows()).length === 3);
+  expect(input.getAttribute('aria-invalid')).toBe('true');
+});
+
+test('金額の範囲に入る取引が無ければ、範囲を添えてその旨を出し、入力画面へのリンクは出さない', async () => {
+  await setup();
+  renderPage();
+  await days();
+
+  await enterAmount('金額の下限', '300000');
+  const message = await emptyMessage();
+  expect(message.textContent).toBe('2026年9月で、金額が300,000円以上の取引はありません。');
+  expect(message.querySelector('a')).toBeNull();
+
+  await searchMemo('ランチ');
+  await enterAmount('金額の上限', '400000');
+  await waitFor(
+    async () =>
+      (await emptyMessage()).textContent ===
+      '2026年9月で、メモに「ランチ」を含み、金額が300,000円以上400,000円以下の取引はありません。',
+  );
+});
+
+test('金額の範囲は、月を切り替えても残す', async () => {
+  const { expense, cash } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  const dinner = await addTransaction(db, {
+    date: '2026-10-05',
+    amount: 5000,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: '',
+  });
+  await addTransaction(db, {
+    date: '2026-10-06',
+    amount: 500,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: '',
+  });
+  db.close();
+  renderPage();
+  await days();
+
+  await enterAmount('金額の下限', '1000');
+  await enterAmount('金額の上限', '10000');
+  await clickButton('翌月');
+  await waitFor(() => monthLabel() === '2026年10月');
+  await waitFor(async () => (await rows()).length === 1);
+  expect((await rows()).map((a) => a.getAttribute('href'))).toEqual([
+    `#/transactions/${dinner.id}`,
+  ]);
+});
