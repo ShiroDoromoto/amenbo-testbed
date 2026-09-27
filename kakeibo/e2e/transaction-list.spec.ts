@@ -53,13 +53,17 @@ async function seedTransactions(page: Page): Promise<void> {
   );
 }
 
-test('取引の一覧に、取引が日付の新しい順に出る', async ({ page }) => {
+test('取引の一覧に、取引が日付の新しい順に日ごとの小計つきで出る', async ({ page }) => {
   await seedTransactions(page);
   await page.goto('/#/transactions');
-  const items = page.getByRole('main').getByRole('listitem');
-  await expect(items).toHaveCount(2);
-  await expect(items.nth(0)).toContainText('2026-09-20');
-  await expect(items.nth(1)).toContainText('2026-09-10');
+  const main = page.getByRole('main');
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+  const days = main.getByRole('heading', { level: 3 });
+  await expect(days).toHaveCount(2);
+  await expect(days.nth(0)).toContainText('2026-09-20');
+  await expect(days.nth(0)).toContainText('-1,234,567円');
+  await expect(days.nth(1)).toContainText('2026-09-10');
+  await expect(days.nth(1)).toContainText('-800円');
 });
 
 test('一覧の取引を押すと、その取引の編集画面が開く', async ({ page }) => {
