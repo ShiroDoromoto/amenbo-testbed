@@ -89,6 +89,22 @@ test('前月・翌月のボタンで、表示する月を切り替える', async
   await expect(main.getByRole('listitem')).toHaveCount(2);
 });
 
+test('カテゴリを選ぶと、そのカテゴリの取引だけが出る', async ({ page }) => {
+  await seedTransactions(page);
+  await page.goto('/#/transactions');
+  const main = page.getByRole('main');
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+  const filter = main.getByLabel('カテゴリ');
+
+  const other = await filter.locator('optgroup[label="収入"] option').first().textContent();
+  await filter.selectOption({ label: other! });
+  await expect(main.getByText(`2026年9月の「${other}」の取引はありません`)).toBeVisible();
+  await expect(main.getByRole('listitem')).toHaveCount(0);
+
+  await filter.selectOption({ label: 'すべて' });
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+});
+
 test('一覧の取引を押すと、その取引の編集画面が開く', async ({ page }) => {
   await seedTransactions(page);
   await page.goto('/#/transactions');
@@ -100,12 +116,15 @@ test('一覧の取引を押すと、その取引の編集画面が開く', async
   await expect(page.getByRole('main').getByLabel('メモ')).toHaveValue('ランチ');
 });
 
-test('スマホ幅でも、取引の一覧と月の切り替えが横にはみ出さない', async ({ page }) => {
+test('スマホ幅でも、取引の一覧と月の切り替え、カテゴリの絞り込みが横にはみ出さない', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 375, height: 667 });
   await seedTransactions(page);
   await page.goto('/#/transactions');
   await expect(page.getByRole('main').getByRole('listitem')).toHaveCount(2);
   await expect(page.getByRole('button', { name: '翌月' })).toBeInViewport();
+  await expect(page.getByRole('main').getByLabel('カテゴリ')).toBeInViewport();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
