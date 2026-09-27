@@ -34,6 +34,16 @@ export async function restoreTransaction(
   await db.add('transactions', transaction);
 }
 
+/** 消した取引をまとめて、同じ id のまま入れ直す。1件でも入れられなければ、どれも入れない。 */
+export async function restoreTransactions(
+  db: KakeiboDBConnection,
+  transactions: readonly Transaction[],
+): Promise<void> {
+  transactions.forEach(assertSavable);
+  const tx = db.transaction('transactions', 'readwrite');
+  await Promise.all([...transactions.map((t) => tx.store.add(t)), tx.done]);
+}
+
 /** id の取引を返す。無ければ `undefined` を返す。 */
 export async function getTransaction(
   db: KakeiboDBConnection,
@@ -61,6 +71,15 @@ export async function updateTransaction(
 /** 取引を消す。id の取引が無ければ何もしない。 */
 export async function deleteTransaction(db: KakeiboDBConnection, id: string): Promise<void> {
   await db.delete('transactions', id);
+}
+
+/** 取引をまとめて消す。無い id は飛ばす。どれかを消せなければ、どれも消さない。 */
+export async function deleteTransactions(
+  db: KakeiboDBConnection,
+  ids: readonly string[],
+): Promise<void> {
+  const tx = db.transaction('transactions', 'readwrite');
+  await Promise.all([...ids.map((id) => tx.store.delete(id)), tx.done]);
 }
 
 /** すべての取引を返す。順は決めない。 */

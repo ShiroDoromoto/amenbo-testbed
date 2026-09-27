@@ -7,11 +7,13 @@ import {
   addTransaction,
   countTransactionsByCategory,
   deleteTransaction,
+  deleteTransactions,
   getTransaction,
   listTransactions,
   listRecentMemos,
   listTransactionsByDateRange,
   restoreTransaction,
+  restoreTransactions,
   updateTransaction,
   type NewTransaction,
 } from './transactions.ts';
@@ -143,6 +145,35 @@ describe('deleteTransaction', () => {
     await addTransaction(db, newTransaction());
     await deleteTransaction(db, 'missing');
     expect(await db.count('transactions')).toBe(1);
+  });
+});
+
+describe('deleteTransactions', () => {
+  it('removes every given transaction and skips missing ids', async () => {
+    const kept = await addTransaction(db, newTransaction());
+    const first = await addTransaction(db, newTransaction());
+    const second = await addTransaction(db, newTransaction());
+    await deleteTransactions(db, [first.id, 'missing', second.id]);
+    expect(await db.getAllKeys('transactions')).toEqual([kept.id]);
+  });
+});
+
+describe('restoreTransactions', () => {
+  it('puts deleted transactions back under the same ids', async () => {
+    const first = await addTransaction(db, newTransaction({ memo: 'ランチ' }));
+    const second = await addTransaction(db, newTransaction({ memo: '夕食' }));
+    await deleteTransactions(db, [first.id, second.id]);
+    await restoreTransactions(db, [first, second]);
+    expect(await db.get('transactions', first.id)).toEqual(first);
+    expect(await db.get('transactions', second.id)).toEqual(second);
+  });
+
+  it('restores none when one of them already exists', async () => {
+    const existing = await addTransaction(db, newTransaction());
+    const deleted = await addTransaction(db, newTransaction());
+    await deleteTransaction(db, deleted.id);
+    await expect(restoreTransactions(db, [deleted, existing])).rejects.toThrow();
+    expect(await db.get('transactions', deleted.id)).toBeUndefined();
   });
 });
 
