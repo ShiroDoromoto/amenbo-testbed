@@ -3,7 +3,16 @@ import { useToast } from '../../components/Toast/index.ts';
 import type { Category } from '../../domain/category.ts';
 import type { IncomeExpenseType } from '../../domain/transaction.ts';
 import { openKakeiboDB, type KakeiboDBConnection } from '../../db/index.ts';
-import { addCategory, listCategories, updateCategory } from '../../db/repositories/categories.ts';
+import {
+  addCategory,
+  deleteCategory,
+  deleteCategoryAndReassign,
+  listCategories,
+  updateCategory,
+} from '../../db/repositories/categories.ts';
+import { listRecurringTransactions } from '../../db/repositories/recurring.ts';
+import { countTransactionsByCategory } from '../../db/repositories/transactions.ts';
+import { DeleteCategoryDialog, type CategoryUsage } from './DeleteCategoryDialog.tsx';
 import { validateCategoryName } from './validateCategoryName.ts';
 import './categoryList.css';
 
@@ -34,12 +43,19 @@ function nextOrder(categories: readonly Category[], type: IncomeExpenseType): nu
   return orders.length === 0 ? 0 : Math.max(...orders) + 1;
 }
 
+/** 付け替え先の候補。`category` と同じ収支区分の、ほかのカテゴリ。 */
+function reassignCandidates(categories: readonly Category[], category: Category): Category[] {
+  return categories.filter((c) => c.type === category.type && c.id !== category.id);
+}
+
 /**
- * カテゴリの管理画面。カテゴリを収支区分ごとに並び順で出し、追加と名前の変更ができる。
+ * カテゴリの管理画面。カテゴリを収支区分ごとに並び順で出し、追加・名前の変更・削除ができる。
+ * 使われているカテゴリを消すときは、取引と定期取引の付け替え先を選ばせる。
  * `ToastProvider` の中で使う。
  */
 export function CategoryList({ dbName }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [deleting, setDeleting] = useState<CategoryUsage | null>(null);
   const toast = useToast();
   const id = useId();
 
@@ -95,6 +111,47 @@ export function CategoryList({ dbName }: Props) {
     return true;
   }
 
+  /** 使っている件数を数えて、削除の確認を出す。 */
+  async function startDeleting(category: Category) {
+    if (!loaded) return;
+    const [transactions, recurrings] = await Promise.all([
+      countTransactionsByCategory(loaded.db, category.id),
+      listRecurringTransactions(loaded.db),
+    ]);
+    const usage: CategoryUsage = {
+      category,
+      transactions,
+      recurrings: recurrings.filter((r) => r.type !== 'transfer' && r.categoryId === category.id)
+        .length,
+    };
+    const used = usage.transactions + usage.recurrings > 0;
+    if (used && reassignCandidates(loaded.categories, category).length === 0) {
+      toast.show(
+        `${typeLabels[category.type]}のカテゴリがほかに無いため、付け替え先を選べません。先にカテゴリを追加してください`,
+        { kind: 'error' },
+      );
+      return;
+    }
+    setDeleting(usage);
+  }
+
+  async function remove(category: Category, toCategoryId: string | null) {
+    if (!loaded) return;
+    setDeleting(null);
+    try {
+      if (toCategoryId === null) {
+        await deleteCategory(loaded.db, category.id);
+      } else {
+        await deleteCategoryAndReassign(loaded.db, category.id, toCategoryId);
+      }
+    } catch {
+      toast.show('削除できませんでした', { kind: 'error' });
+      return;
+    }
+    toast.show('削除しました', { kind: 'success' });
+    await reload(loaded.db);
+  }
+
   return (
     <>
       <h2>カテゴリ</h2>
@@ -116,6 +173,7 @@ export function CategoryList({ dbName }: Props) {
                         category={category}
                         categories={loaded.categories}
                         onRename={rename}
+                        onDelete={startDeleting}
                       />
                     ))}
                   </ul>
@@ -123,6 +181,15 @@ export function CategoryList({ dbName }: Props) {
               </section>
             );
           })}
+          {deleting && (
+            <DeleteCategoryDialog
+              key={deleting.category.id}
+              usage={deleting}
+              candidates={reassignCandidates(loaded.categories, deleting.category)}
+              onConfirm={(toCategoryId) => void remove(deleting.category, toCategoryId)}
+              onCancel={() => setDeleting(null)}
+            />
+          )}
         </>
       ) : (
         <p>読み込み中…</p>
@@ -211,10 +278,14 @@ type RowProps = {
   category: Category;
   categories: readonly Category[];
   onRename: (category: Category, name: string) => Promise<boolean>;
+  onDelete: (category: Category) => void;
 };
 
-/** カテゴリ1件の行。「名前を変える」を押すと、その場で名前の入力欄に変わる。 */
-function CategoryRow({ category, categories, onRename }: RowProps) {
+/**
+ * カテゴリ1件の行。「名前を変える」を押すと、その場で名前の入力欄に変わる。
+ * 「削除する」を押すと、削除の確認を出す。
+ */
+function CategoryRow({ category, categories, onRename, onDelete }: RowProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(category.name);
   const [error, setError] = useState<string | null>(null);
@@ -269,6 +340,14 @@ function CategoryRow({ category, categories, onRename }: RowProps) {
           onClick={startEditing}
         >
           名前を変える
+        </button>
+        <button
+          type="button"
+          class="category-secondary-button"
+          aria-label={`${category.name}を削除する`}
+          onClick={() => onDelete(category)}
+        >
+          削除する
         </button>
       </li>
     );

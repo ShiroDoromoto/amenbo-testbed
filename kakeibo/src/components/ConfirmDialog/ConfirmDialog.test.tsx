@@ -134,6 +134,26 @@ test('Tab でフォーカスをダイアログの中で回す', () => {
   expect(document.activeElement).toBe(ok);
 });
 
+test('説明に置いた入力欄も、Tab で回るフォーカスの輪に入れる', () => {
+  const { root } = renderDialog({
+    children: (
+      <label>
+        付け替え先
+        <select>
+          <option>食費</option>
+        </select>
+      </label>
+    ),
+  });
+  const select = root.querySelector('select')!;
+  const ok = button(root, 'OK');
+  act(() => ok.focus());
+  press('Tab');
+  expect(document.activeElement).toBe(select);
+  press('Tab', { shiftKey: true });
+  expect(document.activeElement).toBe(ok);
+});
+
 test('中の文字を押してフォーカスがダイアログにあっても、Escape と Tab が効く', () => {
   const { root, onCancel } = renderDialog();
   const el = dialog(root)!;

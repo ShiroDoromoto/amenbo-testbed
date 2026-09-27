@@ -2,10 +2,18 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useId, useRef } from 'preact/hooks';
 import './confirmDialog.css';
 
+/** Tab で回す要素。押せないものは飛ばす。 */
+const focusableSelector = [
+  'button:not(:disabled)',
+  'select:not(:disabled)',
+  'input:not(:disabled)',
+  'textarea:not(:disabled)',
+].join(', ');
+
 export type ConfirmDialogProps = {
   open: boolean;
   title: string;
-  /** 見出しの下に出す説明。 */
+  /** 見出しの下に出す説明。入力欄を置いてもよく、Tab で回るフォーカスの輪に入る。 */
   children?: ComponentChildren;
   confirmLabel?: string;
   cancelLabel?: string;
@@ -49,13 +57,15 @@ export function ConfirmDialog({
       return;
     }
     if (event.key !== 'Tab') return;
-    // フォーカスをダイアログの中で回す。
-    const buttons = [...(dialogRef.current?.querySelectorAll('button') ?? [])];
-    const first = buttons[0];
-    const last = buttons[buttons.length - 1];
+    // フォーカスをダイアログの中で回す。説明に置いた入力欄も、その輪に入れる。
+    const focusables = [
+      ...(dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? []),
+    ];
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
     if (!first || !last) return;
-    // 中の文字を押してフォーカスがダイアログそのものにあるときも、ボタンへ戻す。
-    if (!buttons.includes(document.activeElement as HTMLButtonElement)) {
+    // 中の文字を押してフォーカスがダイアログそのものにあるときも、輪の端へ戻す。
+    if (!focusables.includes(document.activeElement as HTMLElement)) {
       event.preventDefault();
       (event.shiftKey ? last : first).focus();
     } else if (event.shiftKey && document.activeElement === first) {

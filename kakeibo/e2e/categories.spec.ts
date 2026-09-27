@@ -32,3 +32,67 @@ test('スマホ幅でも、名前を変えている行が横にはみ出さな�
   );
   expect(overflow).toBe(0);
 });
+
+test('使われているカテゴリを、付け替え先を選んで消す', async ({ page }) => {
+  await page.goto('/#/categories');
+  const main = page.getByRole('main');
+  const expense = main.getByRole('region', { name: '支出' });
+  await expect(expense.getByText('食費')).toBeVisible();
+
+  // 食費を使う取引を1件、DB に直に入れる。
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('kakeibo');
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction(['categories', 'transactions'], 'readwrite');
+          const categories = tx.objectStore('categories').getAll();
+          categories.onsuccess = () => {
+            const food = (categories.result as { id: string; name: string }[]).find(
+              (c) => c.name === '食費',
+            )!;
+            tx.objectStore('transactions').put({
+              id: 'e2e-lunch',
+              date: '2026-09-10',
+              amount: 800,
+              type: 'expense',
+              categoryId: food.id,
+              accountId: 'e2e-cash',
+              memo: 'ランチ',
+            });
+          };
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+
+  await expense.getByRole('button', { name: '食費を削除する' }).click();
+  const dialog = page.getByRole('alertdialog', { name: '「食費」を削除しますか？' });
+  await expect(dialog).toContainText('取引 1 件');
+  await dialog.getByLabel('付け替え先').selectOption({ label: '日用品' });
+  await dialog.getByRole('button', { name: '削除する' }).click();
+  await expect(expense.getByText('食費')).toHaveCount(0);
+
+  // 付け替えた取引は、編集画面で日用品として出る。
+  await page.goto('/#/transactions/e2e-lunch');
+  await expect(main.getByLabel('カテゴリ').locator('option:checked')).toHaveText('日用品');
+});
+
+test('スマホ幅でも、カテゴリの行と削除の確認が横にはみ出さない', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto('/#/categories');
+  const main = page.getByRole('main');
+  await main.getByRole('button', { name: '水道光熱費を削除する' }).click();
+  await expect(page.getByRole('alertdialog')).toBeVisible();
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(0);
+});
