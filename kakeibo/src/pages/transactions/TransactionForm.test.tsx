@@ -254,3 +254,95 @@ test('保存できなかったら、入力を残し、エラーのトースト�
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('保存できませんでした');
   expect(document.querySelector('[role="status"]')).toBeNull();
 });
+
+function labelOf(form: HTMLFormElement, name: string): string | null {
+  const control = form.querySelector(`[name="${name}"]`)!;
+  return form.querySelector(`label[for="${control.id}"]`)?.textContent ?? null;
+}
+
+async function chooseTransfer(form: HTMLFormElement) {
+  await act(() => form.querySelector<HTMLInputElement>('input[value="transfer"]')!.click());
+}
+
+test('振替を選ぶと、カテゴリの欄を隠し、振替元と振替先の口座を出す', async () => {
+  const { form, field } = renderForm();
+  expect(field('toAccountId')).toBeNull();
+  await chooseTransfer(form);
+  expect(field('categoryId')).toBeNull();
+  expect(labelOf(form, 'accountId')).toBe('振替元の口座');
+  expect(labelOf(form, 'toAccountId')).toBe('振替先の口座');
+  expect(optionLabels(field('toAccountId'))).toEqual(['選んでください', '現金', '銀行']);
+
+  await act(() => form.querySelector<HTMLInputElement>('input[value="expense"]')!.click());
+  expect(field('toAccountId')).toBeNull();
+  expect(labelOf(form, 'accountId')).toBe('口座');
+});
+
+test('振替を入力すると、カテゴリを持たない振替の取引にして渡す', async () => {
+  const { form, field, onSubmit } = renderForm();
+  await act(() => choose(field('categoryId'), 'food'));
+  await chooseTransfer(form);
+  await act(() => {
+    type(field('amount'), '30000');
+    choose(field('accountId'), 'bank');
+    choose(field('toAccountId'), 'cash');
+    type(field('memo'), '引き出し');
+  });
+  await submit(form);
+  expect(onSubmit).toHaveBeenCalledWith({
+    date: '2026-09-28',
+    amount: 30000,
+    type: 'transfer',
+    accountId: 'bank',
+    toAccountId: 'cash',
+    memo: '引き出し',
+  });
+});
+
+test('振替先を選ばずに保存すると、振替先にエラーを出し、その欄に移る', async () => {
+  const { form, field, onSubmit } = renderForm();
+  await chooseTransfer(form);
+  await act(() => type(field('amount'), '30000'));
+  await submit(form);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(errorOf(form, 'toAccountId')).toBe('振替先の口座を選んでください');
+  expect(document.activeElement).toBe(field('toAccountId'));
+});
+
+test('振替先が振替元と同じ口座なら、渡さずにエラーを出す', async () => {
+  const { form, field, onSubmit } = renderForm();
+  await chooseTransfer(form);
+  await act(() => {
+    type(field('amount'), '30000');
+    choose(field('toAccountId'), 'cash');
+  });
+  await submit(form);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(errorOf(form, 'toAccountId')).toBe('振替元と別の口座を選んでください');
+});
+
+test('振替を初期値に渡すと、振替の欄にその値を入れて出す', () => {
+  const root = document.createElement('div');
+  document.body.append(root);
+  render(
+    <ToastProvider>
+      <TransactionForm
+        categories={categories}
+        accounts={accounts}
+        defaults={{
+          date: '2026-09-11',
+          type: 'transfer',
+          amount: 30000,
+          accountId: 'bank',
+          toAccountId: 'cash',
+        }}
+        onSubmit={vi.fn()}
+      />
+    </ToastProvider>,
+    root,
+  );
+  const form = root.querySelector('form')!;
+  expect(form.querySelector<HTMLInputElement>('[name="type"]:checked')?.value).toBe('transfer');
+  expect(form.querySelector<HTMLSelectElement>('[name="accountId"]')!.value).toBe('bank');
+  expect(form.querySelector<HTMLSelectElement>('[name="toAccountId"]')!.value).toBe('cash');
+});

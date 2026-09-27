@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
-import { isTransfer, type Transaction } from '../../domain/transaction.ts';
+import type { Transaction } from '../../domain/transaction.ts';
 import { openKakeiboDB, type KakeiboDBConnection } from '../../db/index.ts';
 import { listAccounts } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
@@ -59,8 +59,6 @@ export function EditTransactionPage({ id, dbName }: Props) {
     if (!loaded) return <p>読み込み中…</p>;
     const { transaction } = loaded;
     if (!transaction) return <p>取引が見つかりません。消されたのかもしれません。</p>;
-    // 入力フォームはまだ振替を扱えない。
-    if (isTransfer(transaction)) return <p>振替の取引は、まだ編集できません。</p>;
     return (
       <TransactionForm
         categories={loaded.categories}

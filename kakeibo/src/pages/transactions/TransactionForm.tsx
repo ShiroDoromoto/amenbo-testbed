@@ -3,7 +3,7 @@ import { useId, useRef, useState } from 'preact/hooks';
 import { useToast } from '../../components/Toast/index.ts';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
-import type { IncomeExpenseType } from '../../domain/transaction.ts';
+import type { TransactionType } from '../../domain/transaction.ts';
 import type { NewTransaction } from '../../db/repositories/transactions.ts';
 import {
   validateTransactionInput,
@@ -13,24 +13,33 @@ import {
 } from './validateTransactionInput.ts';
 import './transactionForm.css';
 
-const typeLabels: Record<IncomeExpenseType, string> = {
+const typeLabels: Record<TransactionType, string> = {
   expense: '支出',
   income: '収入',
+  transfer: '振替',
 };
 
 /** 画面に並ぶ順。保存できなかったとき、この順で最初にエラーのある欄に移る。 */
-const fieldOrder: readonly TransactionInputField[] = ['date', 'amount', 'categoryId', 'accountId'];
+const fieldOrder: readonly TransactionInputField[] = [
+  'date',
+  'amount',
+  'categoryId',
+  'accountId',
+  'toAccountId',
+];
 
 /** 欄の初期値。取引を編集するときは、その取引の値を渡す。 */
 export type TransactionFormDefaults = {
   /** `YYYY-MM-DD` 形式。 */
   date: string;
   /** 省略すると支出。 */
-  type?: IncomeExpenseType;
+  type?: TransactionType;
   amount?: number;
   categoryId?: string;
-  /** 省略すると、口座の先頭。 */
+  /** 振替では振替元の口座。省略すると、口座の先頭。 */
   accountId?: string;
+  /** 振替先の口座。 */
+  toAccountId?: string;
   memo?: string;
 };
 
@@ -42,7 +51,7 @@ type Props = {
 };
 
 /**
- * 取引を1件入力するフォーム。入力を確かめ、通ったものだけを `onSubmit` に渡す。
+ * 取引を1件入力するフォーム。収入・支出と振替を扱う。入力を確かめ、通ったものだけを `onSubmit` に渡す。
  * 保存できたらフォームを `defaults` の状態に戻し、トーストで知らせる。
  * `ToastProvider` の中で使う。
  */
@@ -52,11 +61,12 @@ export function TransactionForm({ categories, accounts, defaults, onSubmit }: Pr
     amount: defaults.amount === undefined ? '' : String(defaults.amount),
     categoryId: defaults.categoryId ?? '',
     accountId: defaults.accountId ?? accounts[0]?.id ?? '',
+    toAccountId: defaults.toAccountId ?? '',
   };
   const initialType = defaults.type ?? 'expense';
   const initialMemo = defaults.memo ?? '';
   const [input, setInput] = useState<TransactionInput>(initialInput);
-  const [type, setType] = useState<IncomeExpenseType>(initialType);
+  const [type, setType] = useState<TransactionType>(initialType);
   const [memo, setMemo] = useState(initialMemo);
   const [saving, setSaving] = useState(false);
   // 保存を押すまではエラーを出さない。押したあとは入力を変えるたびに確かめ直し、直した欄のエラーを消す。
@@ -66,16 +76,17 @@ export function TransactionForm({ categories, accounts, defaults, onSubmit }: Pr
   const toast = useToast();
   const typeCategories = categories.filter((c) => c.type === type);
 
-  const validation = validateTransactionInput(input);
+  const transfer = type === 'transfer';
+  const validation = validateTransactionInput(input, type);
   const errors: TransactionInputErrors = submitted && !validation.ok ? validation.errors : {};
 
   function update(field: TransactionInputField, value: string) {
     setInput((prev) => ({ ...prev, [field]: value }));
   }
 
-  function changeType(value: IncomeExpenseType) {
+  function changeType(value: TransactionType) {
     setType(value);
-    // カテゴリはどちらか一方の収支区分に属するので、区分を変えたら選び直してもらう。
+    // カテゴリはどちらか一方の収支区分に属するので、区分を変えたら選び直してもらう。振替はカテゴリを持たない。
     update('categoryId', '');
   }
 
@@ -90,7 +101,7 @@ export function TransactionForm({ categories, accounts, defaults, onSubmit }: Pr
     }
     setSaving(true);
     try {
-      await onSubmit({ ...validation.value, type, memo: memo.trim() });
+      await onSubmit({ ...validation.value, memo: memo.trim() });
     } catch {
       // 入力は残し、直すか押し直せるようにする。
       toast.show('保存できませんでした', { kind: 'error' });
@@ -136,12 +147,18 @@ export function TransactionForm({ categories, accounts, defaults, onSubmit }: Pr
     );
   }
 
+  const accountOptions = accounts.map((a) => (
+    <option key={a.id} value={a.id}>
+      {a.name}
+    </option>
+  ));
+
   return (
     // 必須や形式の確かめはブラウザに任せず、自前のメッセージで出す。
     <form class="transaction-form" ref={formRef} noValidate onSubmit={handleSubmit}>
       <fieldset class="transaction-form-type">
-        <legend>収支</legend>
-        {(Object.keys(typeLabels) as IncomeExpenseType[]).map((value) => (
+        <legend>区分</legend>
+        {(Object.keys(typeLabels) as TransactionType[]).map((value) => (
           <label key={value}>
             <input
               type="radio"
@@ -179,39 +196,50 @@ export function TransactionForm({ categories, accounts, defaults, onSubmit }: Pr
         />,
       )}
 
-      {field(
-        'categoryId',
-        'カテゴリ',
-        <select
-          {...controlProps('categoryId')}
-          value={input.categoryId}
-          onChange={(e) => update('categoryId', e.currentTarget.value)}
-        >
-          <option value="">選んでください</option>
-          {typeCategories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>,
-      )}
+      {!transfer &&
+        field(
+          'categoryId',
+          'カテゴリ',
+          <select
+            {...controlProps('categoryId')}
+            value={input.categoryId}
+            onChange={(e) => update('categoryId', e.currentTarget.value)}
+          >
+            <option value="">選んでください</option>
+            {typeCategories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>,
+        )}
 
       {field(
         'accountId',
-        '口座',
+        transfer ? '振替元の口座' : '口座',
         <select
           {...controlProps('accountId')}
           value={input.accountId}
           onChange={(e) => update('accountId', e.currentTarget.value)}
         >
           {accounts.length === 0 && <option value="">口座がありません</option>}
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
+          {accountOptions}
         </select>,
       )}
+
+      {transfer &&
+        field(
+          'toAccountId',
+          '振替先の口座',
+          <select
+            {...controlProps('toAccountId')}
+            value={input.toAccountId}
+            onChange={(e) => update('toAccountId', e.currentTarget.value)}
+          >
+            <option value="">選んでください</option>
+            {accountOptions}
+          </select>,
+        )}
 
       <div class="transaction-form-field">
         <label for={`${id}-memo`}>メモ</label>

@@ -125,7 +125,7 @@ test('id の取引が無ければ、見つからない旨を出す', async () =>
   expect(document.querySelector('form')).toBeNull();
 });
 
-test('振替の取引では、フォームを出さずにまだ編集できない旨を出す', async () => {
+test('振替の取引も、振替の欄に値を入れて出し、直した内容で置き換える', async () => {
   const { cash, bank } = await setup();
   const db = await openKakeiboDB(testDbName);
   const transfer = await addTransaction(db, {
@@ -139,9 +139,26 @@ test('振替の取引では、フォームを出さずにまだ編集できな�
   db.close();
 
   renderPage(transfer.id);
-  const message = await waitFor(() =>
-    [...document.querySelectorAll('p')].find((p) => p.textContent?.includes('まだ編集できません')),
-  );
-  expect(message).toBeDefined();
-  expect(document.querySelector('form')).toBeNull();
+  const form = await waitFor(() => document.querySelector('form'));
+  const field = <T extends HTMLElement>(name: string) => form.querySelector<T>(`[name="${name}"]`)!;
+  expect(form.querySelector<HTMLInputElement>('[name="type"]:checked')?.value).toBe('transfer');
+  expect(field<HTMLSelectElement>('accountId').value).toBe(bank.id);
+  expect(field<HTMLSelectElement>('toAccountId').value).toBe(cash.id);
+
+  await act(() => {
+    const amount = field<HTMLInputElement>('amount');
+    amount.value = '20000';
+    amount.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+
+  const check = await openKakeiboDB(testDbName);
+  const saved = await waitFor(async () => {
+    const found = await getTransaction(check, transfer.id);
+    return found?.amount === 20000 ? found : null;
+  });
+  check.close();
+  expect(saved).toEqual({ ...transfer, amount: 20000 });
 });
