@@ -36,6 +36,19 @@ CSS には値を直に書かず、`var(--color-text)` のようにトークン�
 新しい値が要るときは、先に `tokens.css` へトークンを足す。
 参照した変数が `tokens.css` に無いと、ユニットテスト（`src/styles/tokens.test.ts`）が落ちる。
 
+## トースト通知
+
+一時的な通知は `src/components/Toast/` の `useToast` で出す。`App` が `ToastProvider` で全体を包んでいるので、どの画面からでも使える。
+
+```tsx
+const toast = useToast();
+toast.show('保存しました', { kind: 'success' });
+toast.show('保存できませんでした', { kind: 'error', duration: 0 });
+```
+
+`kind` は `info`（既定）・`success`・`error`。`error` は `role="alert"`、ほかは `role="status"` で出す。
+`duration` はミリ秒で、既定は 4000。0 にすると、閉じるボタンを押すか `dismiss(id)` を呼ぶまで残る。
+
 ## データのスキーマを変える
 
 データは IndexedDB に置く（`src/db/`）。スキーマのバージョンは、`src/db/migrations/` にある移行の数で決まる。
