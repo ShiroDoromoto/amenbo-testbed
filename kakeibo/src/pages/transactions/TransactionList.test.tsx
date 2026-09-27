@@ -329,3 +329,121 @@ test('選んだカテゴリは、月を切り替えても残す', async () => {
     expense.id,
   );
 });
+
+async function selectType(value: string) {
+  const select = await waitFor(() =>
+    document.querySelector<HTMLSelectElement>('#transaction-filter-type'),
+  );
+  select.value = value;
+  await act(() => {
+    select.dispatchEvent(new Event('change'));
+  });
+}
+
+function categoryGroupLabels() {
+  return [...document.querySelectorAll('#transaction-filter-category optgroup')].map(
+    (g) => (g as HTMLOptGroupElement).label,
+  );
+}
+
+test('収支区分を選ぶと、その区分の取引だけを出し、振替は出さない', async () => {
+  const { lunch, salary } = await setup();
+  renderPage();
+  await days();
+
+  await selectType('income');
+  await waitFor(async () => (await days()).length === 1);
+  expect((await days())[0]!.links).toEqual([`#/transactions/${salary.id}`]);
+
+  await selectType('expense');
+  await waitFor(async () => (await days())[0]!.links[0] === `#/transactions/${lunch.id}`);
+  expect(await days()).toHaveLength(1);
+
+  await selectType('');
+  expect(await days()).toHaveLength(3);
+});
+
+test('収支区分を選ぶと、カテゴリの選択肢をその区分のものだけにする', async () => {
+  await setup();
+  renderPage();
+  await days();
+  expect(categoryGroupLabels()).toEqual(['支出', '収入']);
+
+  await selectType('income');
+  expect(categoryGroupLabels()).toEqual(['収入']);
+
+  await selectType('');
+  expect(categoryGroupLabels()).toEqual(['支出', '収入']);
+});
+
+test('選んでいたカテゴリと別の収支区分を選ぶと、カテゴリを「すべて」に戻す', async () => {
+  const { expense, income, salary } = await setup();
+  renderPage();
+  await days();
+  const category = () =>
+    document.querySelector<HTMLSelectElement>('#transaction-filter-category')!.value;
+
+  await selectCategory(income.id);
+  await selectType('income');
+  expect(category()).toBe(income.id);
+
+  await selectType('');
+  await selectCategory(expense.id);
+  await selectType('income');
+  expect(category()).toBe('');
+  expect((await days()).map((d) => d.links)).toEqual([[`#/transactions/${salary.id}`]]);
+});
+
+test('選んだ収支区分の取引が無ければ、その旨を出す', async () => {
+  const db = await openKakeiboDB(testDbName);
+  const cash = await addAccount(db, { name: '現金', type: 'cash', initialBalance: 0 });
+  const expense = (await listCategories(db, 'expense'))[0]!;
+  await addTransaction(db, {
+    date: '2026-09-10',
+    amount: 800,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: '',
+  });
+  db.close();
+  renderPage();
+  await days();
+
+  await selectType('income');
+  const message = await emptyMessage();
+  expect(message.textContent).toBe('2026年9月の「収入」の取引はありません。');
+  expect(document.querySelector('.transaction-list')).toBeNull();
+});
+
+test('選んだ収支区分は、月を切り替えても残す', async () => {
+  const { cash, expense, income } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  await addTransaction(db, {
+    date: '2026-08-31',
+    amount: 100,
+    type: 'expense',
+    categoryId: expense.id,
+    accountId: cash.id,
+    memo: '',
+  });
+  const august = await addTransaction(db, {
+    date: '2026-08-25',
+    amount: 1000,
+    type: 'income',
+    categoryId: income.id,
+    accountId: cash.id,
+    memo: '',
+  });
+  db.close();
+  renderPage();
+  await days();
+
+  await selectType('income');
+  await clickButton('前月');
+  await waitFor(async () => monthLabel() === '2026年8月' && (await days()).length === 1);
+  expect((await days())[0]!.links).toEqual([`#/transactions/${august.id}`]);
+  expect(document.querySelector<HTMLSelectElement>('#transaction-filter-type')!.value).toBe(
+    'income',
+  );
+});

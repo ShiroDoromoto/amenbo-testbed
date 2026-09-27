@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
-import { isTransfer, type Transaction } from '../../domain/transaction.ts';
+import {
+  isIncomeExpenseType,
+  isTransfer,
+  type IncomeExpenseType,
+  type Transaction,
+} from '../../domain/transaction.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { listAccounts } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
@@ -60,19 +65,31 @@ function monthLabel(month: DateString): string {
   return `${year}年${monthNumber}月`;
 }
 
-/** 絞り込みの選択肢。支出と収入のカテゴリを分けて出す。 */
-const categoryGroups = [
+/** 収支区分の選択肢。カテゴリの選択肢も、この順に支出と収入に分けて出す。 */
+const incomeExpenseLabels = [
   { type: 'expense', label: '支出' },
   { type: 'income', label: '収入' },
 ] as const;
 
-/** カテゴリで絞り込む。振替はカテゴリを持たないので、絞り込むと出さない。 */
-function filterByCategory(
+/** 絞り込む収支区分。空文字はすべての区分。 */
+type TypeFilter = IncomeExpenseType | '';
+
+/**
+ * 収支区分とカテゴリで絞り込む。どちらも空文字なら絞り込まない。
+ * 振替は収支区分もカテゴリも持たないので、どちらかで絞り込むと出さない。
+ */
+function filterTransactions(
   transactions: readonly Transaction[],
+  type: TypeFilter,
   categoryId: string,
 ): readonly Transaction[] {
-  if (categoryId === '') return transactions;
-  return transactions.filter((t) => !isTransfer(t) && t.categoryId === categoryId);
+  if (type === '' && categoryId === '') return transactions;
+  return transactions.filter(
+    (t) =>
+      !isTransfer(t) &&
+      (type === '' || t.type === type) &&
+      (categoryId === '' || t.categoryId === categoryId),
+  );
 }
 
 function subtotalClass(subtotal: Yen): string {
@@ -85,13 +102,16 @@ function subtotalClass(subtotal: Yen): string {
  * 取引の一覧画面。1か月分の取引を日付の新しい順に、日ごとにまとめて出す。
  * 最初は今日の月を出し、前月・翌月のボタンで月を切り替える。
  * 日ごとに収支の小計を添え、取引を押すと編集画面を開く。
- * カテゴリを選ぶと、そのカテゴリの取引だけを出す。選んだカテゴリは、月を切り替えても残す。
+ * 収支区分やカテゴリを選ぶと、その取引だけを出す。選んだものは、月を切り替えても残す。
+ * 収支区分を選ぶと、カテゴリの選択肢はその区分のものだけにする。
  */
 export function TransactionList({ dbName, today }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(today ?? toDateString(new Date())));
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   /** 絞り込むカテゴリの id。空文字はすべてのカテゴリ。 */
   const [categoryId, setCategoryId] = useState('');
+  /** 絞り込む収支区分。空文字はすべての区分。 */
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('');
 
   useEffect(() => {
     const opening = openKakeiboDB(dbName);
@@ -160,30 +180,62 @@ export function TransactionList({ dbName, today }: Props) {
     );
   }
 
-  function categoryFilter(categories: readonly Category[]) {
+  function changeType(value: string, categories: readonly Category[]) {
+    const next = isIncomeExpenseType(value) ? value : '';
+    setTypeFilter(next);
+    // 選んでいたカテゴリが別の区分のものなら、選択肢から消えるので「すべて」に戻す。
+    const selected = categories.find((c) => c.id === categoryId);
+    if (next !== '' && selected && selected.type !== next) setCategoryId('');
+  }
+
+  function filters(categories: readonly Category[]) {
+    const groups = incomeExpenseLabels.filter((g) => typeFilter === '' || g.type === typeFilter);
     return (
       <div class="transaction-filter">
-        <label for="transaction-filter-category">カテゴリ</label>
-        <select
-          id="transaction-filter-category"
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.currentTarget.value)}
-        >
-          <option value="">すべて</option>
-          {categoryGroups.map(({ type, label }) => (
-            <optgroup key={type} label={label}>
-              {categories
-                .filter((c) => c.type === type)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </optgroup>
-          ))}
-        </select>
+        <div class="transaction-filter-field">
+          <label for="transaction-filter-type">収支区分</label>
+          <select
+            id="transaction-filter-type"
+            value={typeFilter}
+            onChange={(e) => changeType(e.currentTarget.value, categories)}
+          >
+            <option value="">すべて</option>
+            {incomeExpenseLabels.map(({ type, label }) => (
+              <option key={type} value={type}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="transaction-filter-field">
+          <label for="transaction-filter-category">カテゴリ</label>
+          <select
+            id="transaction-filter-category"
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.currentTarget.value)}
+          >
+            <option value="">すべて</option>
+            {groups.map(({ type, label }) => (
+              <optgroup key={type} label={label}>
+                {categories
+                  .filter((c) => c.type === type)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
       </div>
     );
+  }
+
+  /** 絞り込んだ結果が無いときに出す名前。カテゴリを選んでいれば、その名前を出す。 */
+  function filterName(categoryNames: ReadonlyMap<string, string>): string {
+    if (categoryId !== '') return categoryNames.get(categoryId) ?? missingName;
+    return incomeExpenseLabels.find((g) => g.type === typeFilter)!.label;
   }
 
   function body() {
@@ -196,12 +248,11 @@ export function TransactionList({ dbName, today }: Props) {
         </p>
       );
     }
-    const transactions = filterByCategory(loaded.transactions, categoryId);
+    const transactions = filterTransactions(loaded.transactions, typeFilter, categoryId);
     if (transactions.length === 0) {
-      const name = loaded.categoryNames.get(categoryId) ?? missingName;
       return (
         <p>
-          {monthLabel(month)}の「{name}」の取引はありません。
+          {monthLabel(month)}の「{filterName(loaded.categoryNames)}」の取引はありません。
         </p>
       );
     }
@@ -226,7 +277,7 @@ export function TransactionList({ dbName, today }: Props) {
           翌月
         </button>
       </nav>
-      {loaded && categoryFilter(loaded.categories)}
+      {loaded && filters(loaded.categories)}
       {body()}
     </>
   );

@@ -105,6 +105,21 @@ test('カテゴリを選ぶと、そのカテゴリの取引だけが出る', as
   await expect(main.getByRole('listitem')).toHaveCount(2);
 });
 
+test('収支区分を選ぶと、その区分の取引だけが出る', async ({ page }) => {
+  await seedTransactions(page);
+  await page.goto('/#/transactions');
+  const main = page.getByRole('main');
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+  const filter = main.getByLabel('収支区分');
+
+  await filter.selectOption({ label: '収入' });
+  await expect(main.getByText('2026年9月の「収入」の取引はありません')).toBeVisible();
+  await expect(main.getByRole('listitem')).toHaveCount(0);
+
+  await filter.selectOption({ label: '支出' });
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+});
+
 test('一覧の取引を押すと、その取引の編集画面が開く', async ({ page }) => {
   await seedTransactions(page);
   await page.goto('/#/transactions');
@@ -116,7 +131,7 @@ test('一覧の取引を押すと、その取引の編集画面が開く', async
   await expect(page.getByRole('main').getByLabel('メモ')).toHaveValue('ランチ');
 });
 
-test('スマホ幅でも、取引の一覧と月の切り替え、カテゴリの絞り込みが横にはみ出さない', async ({
+test('スマホ幅でも、取引の一覧と月の切り替え、収支区分とカテゴリの絞り込みが横にはみ出さない', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 667 });
@@ -124,6 +139,7 @@ test('スマホ幅でも、取引の一覧と月の切り替え、カテゴリ�
   await page.goto('/#/transactions');
   await expect(page.getByRole('main').getByRole('listitem')).toHaveCount(2);
   await expect(page.getByRole('button', { name: '翌月' })).toBeInViewport();
+  await expect(page.getByRole('main').getByLabel('収支区分')).toBeInViewport();
   await expect(page.getByRole('main').getByLabel('カテゴリ')).toBeInViewport();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
