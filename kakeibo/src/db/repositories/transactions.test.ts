@@ -8,6 +8,7 @@ import {
   deleteTransaction,
   getTransaction,
   listTransactionsByDateRange,
+  listTransactionsNewestFirst,
   updateTransaction,
   type NewTransaction,
 } from './transactions.ts';
@@ -161,5 +162,26 @@ describe('listTransactionsByDateRange', () => {
   it('returns nothing when from is after to', async () => {
     await addTransaction(db, newTransaction({ date: '2026-01-15' }));
     expect(await listTransactionsByDateRange(db, '2026-01-31', '2026-01-01')).toEqual([]);
+  });
+});
+
+describe('listTransactionsNewestFirst', () => {
+  it('returns every transaction, newest date first', async () => {
+    const dates = ['2026-01-15', '2025-12-31', '2026-02-01', '2026-01-01'];
+    for (const date of dates) await addTransaction(db, newTransaction({ date }));
+    await addTransaction(db, newTransfer({ date: '2026-01-20' }));
+
+    const all = await listTransactionsNewestFirst(db);
+    expect(all.map((t) => t.date)).toEqual([
+      '2026-02-01',
+      '2026-01-20',
+      '2026-01-15',
+      '2026-01-01',
+      '2025-12-31',
+    ]);
+  });
+
+  it('returns nothing when there are no transactions', async () => {
+    expect(await listTransactionsNewestFirst(db)).toEqual([]);
   });
 });
