@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
+// 入れる取引は 2026年9月のもの。一覧は今日の月を出すので、今日を 2026年9月に決める。
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-09-28T12:00:00'));
+});
+
 /** アプリに DB を作らせてから、口座と支出の取引を2件、直に入れる。 */
 async function seedTransactions(page: Page): Promise<void> {
   await page.goto('/#/transactions/new');
@@ -66,6 +71,24 @@ test('取引の一覧に、取引が日付の新しい順に日ごとの小計�
   await expect(days.nth(1)).toContainText('-800円');
 });
 
+test('前月・翌月のボタンで、表示する月を切り替える', async ({ page }) => {
+  await seedTransactions(page);
+  await page.goto('/#/transactions');
+  const main = page.getByRole('main');
+  const month = main.getByRole('navigation', { name: '表示する月' });
+  await expect(month).toContainText('2026年9月');
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+
+  await month.getByRole('button', { name: '前月' }).click();
+  await expect(month).toContainText('2026年8月');
+  await expect(main.getByText('2026年8月の取引はありません')).toBeVisible();
+  await expect(main.getByRole('listitem')).toHaveCount(0);
+
+  await month.getByRole('button', { name: '翌月' }).click();
+  await expect(month).toContainText('2026年9月');
+  await expect(main.getByRole('listitem')).toHaveCount(2);
+});
+
 test('一覧の取引を押すと、その取引の編集画面が開く', async ({ page }) => {
   await seedTransactions(page);
   await page.goto('/#/transactions');
@@ -77,11 +100,12 @@ test('一覧の取引を押すと、その取引の編集画面が開く', async
   await expect(page.getByRole('main').getByLabel('メモ')).toHaveValue('ランチ');
 });
 
-test('スマホ幅でも、取引の一覧が横にはみ出さない', async ({ page }) => {
+test('スマホ幅でも、取引の一覧と月の切り替えが横にはみ出さない', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
   await seedTransactions(page);
   await page.goto('/#/transactions');
   await expect(page.getByRole('main').getByRole('listitem')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: '翌月' })).toBeInViewport();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
