@@ -2,16 +2,20 @@ import { useEffect, useState } from 'preact/hooks';
 import type { Account } from '../../domain/account.ts';
 import type { Category } from '../../domain/category.ts';
 import type { Transaction } from '../../domain/transaction.ts';
+import { ConfirmDialog } from '../../components/ConfirmDialog/index.ts';
+import { useToast } from '../../components/Toast/index.ts';
 import { openKakeiboDB, type KakeiboDBConnection } from '../../db/index.ts';
 import { listAccounts } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
 import {
+  deleteTransaction,
   getTransaction,
   updateTransaction,
   type NewTransaction,
 } from '../../db/repositories/transactions.ts';
 import { navigate } from '../../router/index.ts';
 import { TransactionForm } from './TransactionForm.tsx';
+import './editTransactionPage.css';
 
 type Loaded = {
   db: KakeiboDBConnection;
@@ -27,9 +31,15 @@ type Props = {
   dbName?: string;
 };
 
-/** 取引の編集画面。id の取引を DB から読んでフォームに入れ、保存したら取引の一覧に戻る。 */
+/**
+ * 取引の編集画面。id の取引を DB から読んでフォームに入れ、保存したら取引の一覧に戻る。
+ * 確認ダイアログで確かめてから、取引を削除することもできる。
+ */
 export function EditTransactionPage({ id, dbName }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     const opening = openKakeiboDB(dbName);
@@ -55,17 +65,54 @@ export function EditTransactionPage({ id, dbName }: Props) {
     navigate('/transactions');
   }
 
+  async function remove() {
+    if (!loaded || deleting) return;
+    setDeleting(true);
+    try {
+      await deleteTransaction(loaded.db, id);
+    } catch {
+      toast.show('削除できませんでした', { kind: 'error' });
+      return;
+    } finally {
+      setDeleting(false);
+      setConfirming(false);
+    }
+    toast.show('削除しました', { kind: 'success' });
+    navigate('/transactions');
+  }
+
+  function form({ categories, accounts }: Loaded, transaction: Transaction) {
+    return (
+      <TransactionForm
+        categories={categories}
+        accounts={accounts}
+        defaults={transaction}
+        onSubmit={save}
+      />
+    );
+  }
+
   function body() {
     if (!loaded) return <p>読み込み中…</p>;
     const { transaction } = loaded;
     if (!transaction) return <p>取引が見つかりません。消されたのかもしれません。</p>;
     return (
-      <TransactionForm
-        categories={loaded.categories}
-        accounts={loaded.accounts}
-        defaults={transaction}
-        onSubmit={save}
-      />
+      <>
+        {form(loaded, transaction)}
+        <button type="button" class="edit-transaction-delete" onClick={() => setConfirming(true)}>
+          この取引を削除する
+        </button>
+        <ConfirmDialog
+          open={confirming}
+          title="取引を削除しますか？"
+          confirmLabel="削除する"
+          danger
+          onConfirm={() => void remove()}
+          onCancel={() => setConfirming(false)}
+        >
+          <p>この操作は取り消せません。</p>
+        </ConfirmDialog>
+      </>
     );
   }
 

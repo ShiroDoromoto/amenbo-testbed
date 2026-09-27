@@ -162,3 +162,62 @@ test('振替の取引も、振替の欄に値を入れて出し、直した内�
   check.close();
   expect(saved).toEqual({ ...transfer, amount: 20000 });
 });
+
+function button(name: string) {
+  return [...document.querySelectorAll('button')].find((b) => b.textContent === name);
+}
+
+test('削除を押すと確認ダイアログを出し、キャンセルなら消さない', async () => {
+  const { transaction } = await setup();
+  renderPage(transaction.id);
+  const open = await waitFor(() => button('この取引を削除する'));
+  await act(() => open.click());
+
+  const dialog = document.querySelector('[role="alertdialog"]');
+  expect(dialog?.textContent).toContain('取引を削除しますか？');
+  await act(() => button('キャンセル')!.click());
+  expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+
+  const check = await openKakeiboDB(testDbName);
+  expect(await getTransaction(check, transaction.id)).toBeDefined();
+  check.close();
+  expect(window.location.hash).toBe('');
+});
+
+test('確認ダイアログで削除すると、取引を消して取引の一覧に戻る', async () => {
+  const { transaction } = await setup();
+  renderPage(transaction.id);
+  const open = await waitFor(() => button('この取引を削除する'));
+  await act(() => open.click());
+  await act(() => button('削除する')!.click());
+
+  await waitFor(() => window.location.hash === '#/transactions');
+  const check = await openKakeiboDB(testDbName);
+  expect(await getTransaction(check, transaction.id)).toBeUndefined();
+  check.close();
+  expect(document.body.textContent).toContain('削除しました');
+});
+
+test('振替の取引も削除できる', async () => {
+  const { cash, bank } = await setup();
+  const db = await openKakeiboDB(testDbName);
+  const transfer = await addTransaction(db, {
+    date: '2026-09-11',
+    amount: 30000,
+    type: 'transfer',
+    accountId: bank.id,
+    toAccountId: cash.id,
+    memo: '',
+  });
+  db.close();
+
+  renderPage(transfer.id);
+  const open = await waitFor(() => button('この取引を削除する'));
+  await act(() => open.click());
+  await act(() => button('削除する')!.click());
+
+  await waitFor(() => window.location.hash === '#/transactions');
+  const check = await openKakeiboDB(testDbName);
+  expect(await getTransaction(check, transfer.id)).toBeUndefined();
+  check.close();
+});
