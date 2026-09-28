@@ -115,6 +115,18 @@ describe('calculateMonthlyTrend', () => {
   });
 
   it('month が YYYY-MM-DD でなければ例外を投げる', () => {
-    expect(() => calculateMonthlyTrend([], '2026-09')).toThrow();
+    expect(() => calculateMonthlyTrend([], '2026-09')).toThrow(RangeError);
+  });
+
+  it('金額が整数でなければ例外を投げる', () => {
+    expect(() => calculateMonthlyTrend([expense('2026-09-01', 0.5)], '2026-09-01')).toThrow(
+      RangeError,
+    );
+  });
+
+  it('合計が扱える範囲を超えたら例外を投げる', () => {
+    const transactions = [expense('2026-09-01', Number.MAX_SAFE_INTEGER), expense('2026-09-02', 1)];
+
+    expect(() => calculateMonthlyTrend(transactions, '2026-09-01')).toThrow(RangeError);
   });
 });

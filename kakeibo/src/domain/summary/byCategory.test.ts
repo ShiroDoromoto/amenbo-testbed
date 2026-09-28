@@ -103,4 +103,13 @@ describe('calculateExpenseByCategory', () => {
       calculateExpenseByCategory([expense('2026-09-01', 'food', 0.5)], '2026-09-01'),
     ).toThrow(RangeError);
   });
+
+  it('合計が扱える範囲を超えたら例外を投げる', () => {
+    const transactions = [
+      expense('2026-09-01', 'food', Number.MAX_SAFE_INTEGER),
+      expense('2026-09-02', 'food', 1),
+    ];
+
+    expect(() => calculateExpenseByCategory(transactions, '2026-09-01')).toThrow(RangeError);
+  });
 });

@@ -107,4 +107,10 @@ describe('calculateMonthlySummary', () => {
       RangeError,
     );
   });
+
+  it('合計が扱える範囲を超えたら例外を投げる', () => {
+    const transactions = [income('2026-09-01', Number.MAX_SAFE_INTEGER), income('2026-09-02', 1)];
+
+    expect(() => calculateMonthlySummary(transactions, '2026-09-01')).toThrow(RangeError);
+  });
 });
