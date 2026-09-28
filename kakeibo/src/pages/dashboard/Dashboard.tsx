@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'preact/hooks';
+import type { Category } from '../../domain/category.ts';
+import {
+  calculateExpenseByCategory,
+  type CategoryExpense,
+} from '../../domain/summary/byCategory.ts';
 import { calculateMonthlySummary, type MonthlySummary } from '../../domain/summary/monthly.ts';
 import { openKakeiboDB } from '../../db/index.ts';
+import { listCategories } from '../../db/repositories/categories.ts';
 import { listTransactionsByDateRange } from '../../db/repositories/transactions.ts';
 import { endOfMonth, startOfMonth, toDateString, type DateString } from '../../lib/date.ts';
 import { formatYen } from '../../lib/money.ts';
 import { hashFromPath } from '../../router/index.ts';
+import { ExpenseByCategoryChart } from './ExpenseByCategoryChart.tsx';
 import './dashboard.css';
 
 type Props = {
@@ -15,7 +22,14 @@ type Props = {
 };
 
 type State =
-  { status: 'loading' } | { status: 'failed' } | { status: 'loaded'; summary: MonthlySummary };
+  | { status: 'loading' }
+  | { status: 'failed' }
+  | {
+      status: 'loaded';
+      summary: MonthlySummary;
+      expenses: CategoryExpense[];
+      categories: Category[];
+    };
 
 function monthLabel(month: DateString): string {
   const [year, monthNumber] = month.split('-').map(Number);
@@ -27,7 +41,7 @@ function signedYen(amount: number): string {
   return amount > 0 ? `+${formatYen(amount)}` : formatYen(amount);
 }
 
-/** ダッシュボード画面。今月の収入・支出・差額を出す。 */
+/** ダッシュボード画面。今月の収入・支出・差額と、カテゴリ別の支出の円グラフを出す。 */
 export function Dashboard({ dbName, today: todayProp }: Props) {
   const [month] = useState(() => startOfMonth(todayProp ?? toDateString(new Date())));
   const [state, setState] = useState<State>({ status: 'loading' });
@@ -38,9 +52,13 @@ export function Dashboard({ dbName, today: todayProp }: Props) {
     void (async () => {
       try {
         const db = await opening;
-        const transactions = await listTransactionsByDateRange(db, month, endOfMonth(month));
+        const [transactions, categories] = await Promise.all([
+          listTransactionsByDateRange(db, month, endOfMonth(month)),
+          listCategories(db),
+        ]);
         const summary = calculateMonthlySummary(transactions, month);
-        if (!cancelled) setState({ status: 'loaded', summary });
+        const expenses = calculateExpenseByCategory(transactions, month);
+        if (!cancelled) setState({ status: 'loaded', summary, expenses, categories });
       } catch {
         if (!cancelled) setState({ status: 'failed' });
       }
@@ -84,6 +102,12 @@ export function Dashboard({ dbName, today: todayProp }: Props) {
           <a href={hashFromPath('/transactions')}>今月の取引を見る</a>
         </p>
       </section>
+      {state.status === 'loaded' && (
+        <section class="dashboard-section" aria-labelledby="dashboard-by-category-heading">
+          <h3 id="dashboard-by-category-heading">カテゴリ別の支出</h3>
+          <ExpenseByCategoryChart expenses={state.expenses} categories={state.categories} />
+        </section>
+      )}
     </>
   );
 }

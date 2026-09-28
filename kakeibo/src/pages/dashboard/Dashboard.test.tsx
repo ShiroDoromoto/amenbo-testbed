@@ -1,13 +1,24 @@
 import 'fake-indexeddb/auto';
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { deleteDB } from 'idb';
 import { openKakeiboDB } from '../../db/index.ts';
 import { addAccount } from '../../db/repositories/accounts.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
 import { addTransaction } from '../../db/repositories/transactions.ts';
-import { Dashboard } from './Dashboard.tsx';
+
+// jsdom の canvas では Chart.js が描けないので、描く部分を差し替える。
+vi.mock('chart.js/auto', () => {
+  class FakeChart {
+    static defaults = { color: '', borderColor: '', font: { family: '' } };
+    update() {}
+    destroy() {}
+  }
+  return { default: FakeChart };
+});
+
+const { Dashboard } = await import('./Dashboard.tsx');
 
 const testDbName = 'kakeibo-dashboard-test';
 
@@ -142,4 +153,34 @@ test('取引の一覧への案内を出す', () => {
     (a) => a.textContent === '今月の取引を見る',
   );
   expect(link?.getAttribute('href')).toBe('#/transactions');
+});
+
+test('今月の支出をカテゴリ別に、多い順で出す', async () => {
+  const db = await openKakeiboDB(testDbName);
+  const bank = await addAccount(db, { name: '銀行', type: 'bank', initialBalance: 0 });
+  const [first, second] = (await listCategories(db)).filter((c) => c.type === 'expense');
+  const base = { accountId: bank.id, memo: '', type: 'expense' as const };
+  await addTransaction(db, { ...base, date: '2026-09-03', amount: 1000, categoryId: first!.id });
+  await addTransaction(db, { ...base, date: '2026-09-04', amount: 3000, categoryId: second!.id });
+  await addTransaction(db, { ...base, date: '2026-08-31', amount: 9000, categoryId: first!.id });
+  db.close();
+
+  renderPage('2026-09-28');
+  const list = await waitFor(() => document.querySelector('.expense-by-category-list'));
+
+  expect(document.querySelector('#dashboard-by-category-heading')?.textContent).toBe(
+    'カテゴリ別の支出',
+  );
+  expect(document.querySelector('canvas')?.getAttribute('aria-label')).toBe(
+    'カテゴリ別の支出の円グラフ',
+  );
+  expect(
+    [...list.querySelectorAll('li')].map((li) => [
+      li.querySelector('.expense-by-category-name')?.textContent,
+      li.querySelector('.expense-by-category-amount')?.textContent,
+    ]),
+  ).toEqual([
+    [second!.name, '3,000円'],
+    [first!.name, '1,000円'],
+  ]);
 });
