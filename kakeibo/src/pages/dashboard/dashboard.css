@@ -1,0 +1,58 @@
+.dashboard-section {
+  max-width: 40rem;
+}
+
+/* 収入・支出・差額を横に並べる */
+.dashboard-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.dashboard-summary-item {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.dashboard-summary-item dt {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.dashboard-amount {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-amount-income {
+  color: var(--color-income);
+}
+
+.dashboard-amount-expense {
+  color: var(--color-expense);
+}
+
+/* スマホ幅では、1項目ずつ縦に積み、名前と金額を1行に並べる */
+@media (max-width: 640px) {
+  .dashboard-summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .dashboard-summary-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .dashboard-amount {
+    font-size: var(--font-size-lg);
+    text-align: right;
+  }
+}

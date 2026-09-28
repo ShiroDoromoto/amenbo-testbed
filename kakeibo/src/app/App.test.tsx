@@ -50,6 +50,7 @@ test('`#/transactions/new` では、編集画面ではなく入力画面を出�
 });
 
 test.each([
+  ['#/', 'ダッシュボード'],
   ['#/recurring', '定期取引'],
   ['#/recurring/new', '定期取引の追加'],
   ['#/recurring/abc', '定期取引の編集'],
