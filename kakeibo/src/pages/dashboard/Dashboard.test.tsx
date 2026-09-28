@@ -228,3 +228,46 @@ test('直近 12 か月の収支を、月ごとの棒グラフで出す', async (
   expect(rows[0]).toEqual(['2025年10月', '0円', '7,000円', '-7,000円']);
   expect(rows[11]).toEqual(['2026年9月', '250,000円', '0円', '250,000円']);
 });
+
+test('今月の収支を、前月比と前年同月比で出す', async () => {
+  const db = await openKakeiboDB(testDbName);
+  const bank = await addAccount(db, { name: '銀行', type: 'bank', initialBalance: 0 });
+  const categories = await listCategories(db);
+  const expense = categories.find((c) => c.type === 'expense')!;
+  const income = categories.find((c) => c.type === 'income')!;
+  const base = { accountId: bank.id, memo: '' };
+  const add = (date: string, amount: number, type: 'income' | 'expense') =>
+    addTransaction(db, {
+      ...base,
+      date,
+      amount,
+      type,
+      categoryId: (type === 'income' ? income : expense).id,
+    });
+  await add('2026-09-25', 250000, 'income');
+  await add('2026-09-10', 90000, 'expense');
+  await add('2026-08-31', 100000, 'expense');
+  await add('2025-09-01', 60000, 'expense');
+  db.close();
+
+  renderPage('2026-09-28');
+  const table = await waitFor(() => document.querySelector('.month-comparison'));
+
+  expect(document.querySelector('#dashboard-comparison-heading')?.textContent).toBe(
+    '前月・前年同月との比較',
+  );
+  expect(
+    [...table.querySelectorAll('tr')].map((tr) =>
+      [...tr.children].map(
+        (cell) =>
+          [...cell.querySelectorAll('span')].map((s) => s.textContent).join(' ') ||
+          cell.textContent,
+      ),
+    ),
+  ).toEqual([
+    ['項目', '前月比', '前年同月比'],
+    ['収入', '+250,000円 —', '+250,000円 —'],
+    ['支出', '-10,000円 -10%', '+30,000円 +50%'],
+    ['差額', '+260,000円 +260%', '+220,000円 +367%'],
+  ]);
+});
