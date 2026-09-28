@@ -4,6 +4,7 @@ import { AccountList } from '../pages/accounts/AccountList.tsx';
 import { EditAccountPage } from '../pages/accounts/EditAccountPage.tsx';
 import { NewAccountPage } from '../pages/accounts/NewAccountPage.tsx';
 import { CategoryList } from '../pages/categories/CategoryList.tsx';
+import { Dashboard } from '../pages/dashboard/Dashboard.tsx';
 import { EditRecurringPage } from '../pages/recurring/EditRecurringPage.tsx';
 import { NewRecurringPage } from '../pages/recurring/NewRecurringPage.tsx';
 import { RecurringList } from '../pages/recurring/RecurringList.tsx';
@@ -13,6 +14,7 @@ import { TransactionList } from '../pages/transactions/TransactionList.tsx';
 import { navItems } from './navItems.ts';
 
 const pages: Readonly<Record<string, () => ComponentChildren>> = {
+  '/': () => <Dashboard />,
   '/transactions': () => <TransactionList />,
   '/transactions/new': () => <NewTransactionPage />,
   '/recurring': () => <RecurringList />,
