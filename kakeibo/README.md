@@ -138,6 +138,11 @@ canvas の中には、月末の残高の表を置く。
 差額は、収入が多ければ `+` を付けて収入の色、支出が多ければ `-` を付けて支出の色で出す。
 スマホ幅では、3つの項目を縦に積む。
 
+その下に、収入・支出・差額の前月比と前年同月比を表で出す（`MonthComparison`）。
+計算は `src/domain/summary/comparison.ts` の `calculateMonthlyComparison` で、比べる元の月も振替は数えない。
+増減は「+10,000円」のような金額と、その下の「+12%」のような割合で書く。割合は、差を比べる元の金額の絶対値で割り、整数に丸める。
+比べる元が 0円 のときは、割合を「—」にする。
+
 その下に、今月の支出をカテゴリ別に円グラフで出す（`ExpenseByCategoryChart`）。
 数え方は `src/domain/summary/byCategory.ts` の `calculateExpenseByCategory` と同じで、多い順に並べる。
 扇の色はカテゴリの表示色にする。凡例は Chart.js のものを使わず、グラフの下にカテゴリ・金額・割合の一覧を出す。

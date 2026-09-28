@@ -4,12 +4,11 @@ import {
   calculateExpenseByCategory,
   type CategoryExpense,
 } from '../../domain/summary/byCategory.ts';
-import { calculateMonthlySummary, type MonthlySummary } from '../../domain/summary/monthly.ts';
 import {
-  calculateMonthlyTrend,
-  TREND_MONTHS,
-  type MonthlyTrendPoint,
-} from '../../domain/summary/trend.ts';
+  calculateMonthlyComparison,
+  type MonthlyComparison,
+} from '../../domain/summary/comparison.ts';
+import { calculateMonthlyTrend, type MonthlyTrendPoint } from '../../domain/summary/trend.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
 import { listTransactionsByDateRange } from '../../db/repositories/transactions.ts';
@@ -23,6 +22,7 @@ import {
 import { formatYen } from '../../lib/money.ts';
 import { hashFromPath } from '../../router/index.ts';
 import { ExpenseByCategoryChart } from './ExpenseByCategoryChart.tsx';
+import { MonthComparison } from './MonthComparison.tsx';
 import { MonthlyTrendChart } from './MonthlyTrendChart.tsx';
 import './dashboard.css';
 
@@ -38,7 +38,7 @@ type State =
   | { status: 'failed' }
   | {
       status: 'loaded';
-      summary: MonthlySummary;
+      comparison: MonthlyComparison;
       expenses: CategoryExpense[];
       categories: Category[];
       trend: MonthlyTrendPoint[];
@@ -55,8 +55,8 @@ function signedYen(amount: number): string {
 }
 
 /**
- * ダッシュボード画面。今月の収入・支出・差額と、カテゴリ別の支出の円グラフ、
- * 直近 12 か月の収支の棒グラフを出す。
+ * ダッシュボード画面。今月の収入・支出・差額と、その前月比・前年同月比、
+ * カテゴリ別の支出の円グラフ、直近 12 か月の収支の棒グラフを出す。
  */
 export function Dashboard({ dbName, today: todayProp }: Props) {
   const [month] = useState(() => startOfMonth(todayProp ?? toDateString(new Date())));
@@ -69,14 +69,15 @@ export function Dashboard({ dbName, today: todayProp }: Props) {
       try {
         const db = await opening;
         const [transactions, categories] = await Promise.all([
-          // 推移に使う 12 か月分をまとめて読む。今月の集計は、その中から今月の取引だけを数える。
-          listTransactionsByDateRange(db, addMonths(month, -(TREND_MONTHS - 1)), endOfMonth(month)),
+          // 推移に使う 12 か月分と、その前の月（前年同月）の分をまとめて読む。
+          // 今月の集計と比較は、その中から要る月の取引だけを数える。
+          listTransactionsByDateRange(db, addMonths(month, -12), endOfMonth(month)),
           listCategories(db),
         ]);
-        const summary = calculateMonthlySummary(transactions, month);
+        const comparison = calculateMonthlyComparison(transactions, month);
         const expenses = calculateExpenseByCategory(transactions, month);
         const trend = calculateMonthlyTrend(transactions, month);
-        if (!cancelled) setState({ status: 'loaded', summary, expenses, categories, trend });
+        if (!cancelled) setState({ status: 'loaded', comparison, expenses, categories, trend });
       } catch {
         if (!cancelled) setState({ status: 'failed' });
       }
@@ -90,7 +91,7 @@ export function Dashboard({ dbName, today: todayProp }: Props) {
   function body() {
     if (state.status === 'loading') return <p>読み込み中…</p>;
     if (state.status === 'failed') return <p>今月の収支を読み込めませんでした。</p>;
-    const { income, expense, balance } = state.summary;
+    const { income, expense, balance } = state.comparison.current;
     const balanceKind = balance > 0 ? 'income' : balance < 0 ? 'expense' : 'zero';
     return (
       <dl class="dashboard-summary">
@@ -120,6 +121,12 @@ export function Dashboard({ dbName, today: todayProp }: Props) {
           <a href={hashFromPath('/transactions')}>今月の取引を見る</a>
         </p>
       </section>
+      {state.status === 'loaded' && (
+        <section class="dashboard-section" aria-labelledby="dashboard-comparison-heading">
+          <h3 id="dashboard-comparison-heading">前月・前年同月との比較</h3>
+          <MonthComparison comparison={state.comparison} />
+        </section>
+      )}
       {state.status === 'loaded' && (
         <section class="dashboard-section" aria-labelledby="dashboard-by-category-heading">
           <h3 id="dashboard-by-category-heading">カテゴリ別の支出</h3>
