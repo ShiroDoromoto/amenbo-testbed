@@ -129,3 +129,25 @@ DB を開くと、保存されているバージョンより新しい移行だ�
 数え方は `src/domain/summary/monthly.ts` の `calculateMonthlySummary` と同じで、振替は数えない。
 差額は、収入が多ければ `+` を付けて収入の色、支出が多ければ `-` を付けて支出の色で出す。
 スマホ幅では、3つの項目を縦に積む。
+
+## グラフ
+
+グラフは `src/components/charts/` の `Chart` で描く。中では Chart.js を使う。
+
+```tsx
+<Chart
+  type="bar"
+  label="月ごとの支出"
+  data={{ labels: ['8月', '9月'], datasets: [{ label: '支出', data: [52000, 48000] }] }}
+>
+  <p>8月 52,000円、9月 48,000円</p>
+</Chart>
+```
+
+`type` は Chart.js のグラフの種類（`bar`・`line`・`doughnut` など）。`data` と `options` は Chart.js の形でそのまま渡す。
+`label` は canvas の `aria-label` になる。`children` は canvas の中に置き、canvas を描けないときと支援技術に向けた中身にする。
+幅は親に合わせ、高さは `--size-chart-height`（スマホ幅では `--size-chart-height-sm`）で決める。
+`data` と `options` が変わると描き直し、`type` が変わると作り直す。
+
+canvas には CSS の `var(--…)` が効かない。系列の色は `readToken('--color-income')` のように tokens.css から読んで渡す。
+文字と罫線の色・書体は、`Chart` が tokens.css に合わせる。
