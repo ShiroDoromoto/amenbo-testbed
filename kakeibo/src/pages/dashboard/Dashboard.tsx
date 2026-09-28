@@ -5,13 +5,25 @@ import {
   type CategoryExpense,
 } from '../../domain/summary/byCategory.ts';
 import { calculateMonthlySummary, type MonthlySummary } from '../../domain/summary/monthly.ts';
+import {
+  calculateMonthlyTrend,
+  TREND_MONTHS,
+  type MonthlyTrendPoint,
+} from '../../domain/summary/trend.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
 import { listTransactionsByDateRange } from '../../db/repositories/transactions.ts';
-import { endOfMonth, startOfMonth, toDateString, type DateString } from '../../lib/date.ts';
+import {
+  addMonths,
+  endOfMonth,
+  startOfMonth,
+  toDateString,
+  type DateString,
+} from '../../lib/date.ts';
 import { formatYen } from '../../lib/money.ts';
 import { hashFromPath } from '../../router/index.ts';
 import { ExpenseByCategoryChart } from './ExpenseByCategoryChart.tsx';
+import { MonthlyTrendChart } from './MonthlyTrendChart.tsx';
 import './dashboard.css';
 
 type Props = {
@@ -29,6 +41,7 @@ type State =
       summary: MonthlySummary;
       expenses: CategoryExpense[];
       categories: Category[];
+      trend: MonthlyTrendPoint[];
     };
 
 function monthLabel(month: DateString): string {
@@ -41,7 +54,10 @@ function signedYen(amount: number): string {
   return amount > 0 ? `+${formatYen(amount)}` : formatYen(amount);
 }
 
-/** ダッシュボード画面。今月の収入・支出・差額と、カテゴリ別の支出の円グラフを出す。 */
+/**
+ * ダッシュボード画面。今月の収入・支出・差額と、カテゴリ別の支出の円グラフ、
+ * 直近 12 か月の収支の棒グラフを出す。
+ */
 export function Dashboard({ dbName, today: todayProp }: Props) {
   const [month] = useState(() => startOfMonth(todayProp ?? toDateString(new Date())));
   const [state, setState] = useState<State>({ status: 'loading' });
@@ -53,12 +69,14 @@ export function Dashboard({ dbName, today: todayProp }: Props) {
       try {
         const db = await opening;
         const [transactions, categories] = await Promise.all([
-          listTransactionsByDateRange(db, month, endOfMonth(month)),
+          // 推移に使う 12 か月分をまとめて読む。今月の集計は、その中から今月の取引だけを数える。
+          listTransactionsByDateRange(db, addMonths(month, -(TREND_MONTHS - 1)), endOfMonth(month)),
           listCategories(db),
         ]);
         const summary = calculateMonthlySummary(transactions, month);
         const expenses = calculateExpenseByCategory(transactions, month);
-        if (!cancelled) setState({ status: 'loaded', summary, expenses, categories });
+        const trend = calculateMonthlyTrend(transactions, month);
+        if (!cancelled) setState({ status: 'loaded', summary, expenses, categories, trend });
       } catch {
         if (!cancelled) setState({ status: 'failed' });
       }
@@ -106,6 +124,12 @@ export function Dashboard({ dbName, today: todayProp }: Props) {
         <section class="dashboard-section" aria-labelledby="dashboard-by-category-heading">
           <h3 id="dashboard-by-category-heading">カテゴリ別の支出</h3>
           <ExpenseByCategoryChart expenses={state.expenses} categories={state.categories} />
+        </section>
+      )}
+      {state.status === 'loaded' && (
+        <section class="dashboard-section" aria-labelledby="dashboard-trend-heading">
+          <h3 id="dashboard-trend-heading">月ごとの収支の推移</h3>
+          <MonthlyTrendChart trend={state.trend} />
         </section>
       )}
     </>

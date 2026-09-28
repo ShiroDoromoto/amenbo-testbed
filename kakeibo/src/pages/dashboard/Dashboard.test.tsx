@@ -184,3 +184,47 @@ test('今月の支出をカテゴリ別に、多い順で出す', async () => {
     [first!.name, '1,000円'],
   ]);
 });
+
+test('直近 12 か月の収支を、月ごとの棒グラフで出す', async () => {
+  const db = await openKakeiboDB(testDbName);
+  const bank = await addAccount(db, { name: '銀行', type: 'bank', initialBalance: 0 });
+  const categories = await listCategories(db);
+  const expense = categories.find((c) => c.type === 'expense')!;
+  const income = categories.find((c) => c.type === 'income')!;
+  const base = { accountId: bank.id, memo: '' };
+  await addTransaction(db, {
+    ...base,
+    date: '2025-10-01',
+    amount: 7000,
+    type: 'expense',
+    categoryId: expense.id,
+  });
+  await addTransaction(db, {
+    ...base,
+    date: '2025-09-30',
+    amount: 9000,
+    type: 'expense',
+    categoryId: expense.id,
+  });
+  await addTransaction(db, {
+    ...base,
+    date: '2026-09-25',
+    amount: 250000,
+    type: 'income',
+    categoryId: income.id,
+  });
+  db.close();
+
+  renderPage('2026-09-28');
+  const table = await waitFor(() => document.querySelector('canvas table'));
+
+  expect(document.querySelector('#dashboard-trend-heading')?.textContent).toBe(
+    '月ごとの収支の推移',
+  );
+  const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
+    [...tr.children].map((cell) => cell.textContent),
+  );
+  expect(rows).toHaveLength(12);
+  expect(rows[0]).toEqual(['2025年10月', '0円', '7,000円', '-7,000円']);
+  expect(rows[11]).toEqual(['2026年9月', '250,000円', '0円', '250,000円']);
+});
