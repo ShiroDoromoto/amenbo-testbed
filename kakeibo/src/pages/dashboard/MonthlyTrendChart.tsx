@@ -1,6 +1,12 @@
 import type { ChartData, ChartOptions } from 'chart.js';
 import { useMemo } from 'preact/hooks';
-import { Chart, readToken } from '../../components/charts/index.ts';
+import {
+  Chart,
+  compactYenLabel,
+  longMonthLabel,
+  readToken,
+  shortMonthLabel,
+} from '../../components/charts/index.ts';
 import type { MonthlyTrendPoint } from '../../domain/summary/trend.ts';
 import { formatYen } from '../../lib/money.ts';
 
@@ -8,24 +14,6 @@ type Props = {
   /** 月ごとの収支。古い月から並んでいる順に出す。 */
   trend: readonly MonthlyTrendPoint[];
 };
-
-function splitMonth(month: string): [year: number, month: number] {
-  const [year, monthNumber] = month.split('-').map(Number) as [number, number];
-  return [year, monthNumber];
-}
-
-/** 軸の目盛り。狭い幅でも収まるよう、月だけにする。 */
-function shortMonthLabel(month: string): string {
-  return `${splitMonth(month)[1]}月`;
-}
-
-function longMonthLabel(month: string): string {
-  const [year, monthNumber] = splitMonth(month);
-  return `${year}年${monthNumber}月`;
-}
-
-/** 縦軸の目盛り。「25万円」のように短くする。 */
-const compactYen = new Intl.NumberFormat('ja-JP', { notation: 'compact' });
 
 /**
  * 月ごとの収入と支出を、並べた棒グラフで出す。
@@ -56,7 +44,7 @@ export function MonthlyTrendChart({ trend }: Props) {
       scales: {
         y: {
           beginAtZero: true,
-          ticks: { callback: (value) => `${compactYen.format(Number(value))}円` },
+          ticks: { callback: (value) => compactYenLabel(Number(value)) },
         },
       },
       plugins: {
