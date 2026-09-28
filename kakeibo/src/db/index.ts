@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { Account } from '../domain/account.ts';
+import type { Budget } from '../domain/budget.ts';
 import type { Category } from '../domain/category.ts';
 import type { RecurringTransaction } from '../domain/recurring.ts';
 import type { Transaction } from '../domain/transaction.ts';
@@ -32,6 +33,14 @@ export interface KakeiboDB extends DBSchema {
   recurringTransactions: {
     key: string;
     value: RecurringTransaction;
+  };
+  budgets: {
+    key: string;
+    value: Budget;
+    indexes: {
+      'by-category-month': [string, string];
+      'by-month': string;
+    };
   };
 }
 

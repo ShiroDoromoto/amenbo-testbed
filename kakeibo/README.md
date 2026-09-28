@@ -180,6 +180,13 @@ canvas の中には、月ごとの収入・支出・差額の表を置く。12 �
 期間を指定したら `from` と `to`（例：`#/reports?from=2025-04-01&to=2026-03-31`）で、正しい期間でなければ `year` を読む。
 幅が足りなければ、表だけを横にスクロールする。カテゴリの列は左に残る。
 
+## 予算
+
+予算は、支出のカテゴリと月（`YYYY-MM`）の組ごとに1件まで立てる（`src/domain/budget.ts` の `Budget`）。額は 0 以上の円の整数。
+ストア `budgets` に置き、読み書きは `src/db/repositories/budgets.ts` で行う。
+`setBudget` は、同じ組の予算があれば同じ id のまま額を置き換え、無ければ足す。収入のカテゴリや無いカテゴリには立てられない。
+`getBudget` はカテゴリと月で1件、`listBudgets` は1つの月の予算を返す。
+
 ## グラフ
 
 グラフは `src/components/charts/` の `Chart` で描く。中では Chart.js を使う。

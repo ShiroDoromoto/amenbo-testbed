@@ -34,6 +34,7 @@ describe('openKakeiboDB', () => {
     expect(db.version).toBe(dbVersion);
     expect([...db.objectStoreNames].sort()).toEqual([
       'accounts',
+      'budgets',
       'categories',
       'recurringTransactions',
       'transactions',
