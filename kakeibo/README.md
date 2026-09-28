@@ -130,6 +130,11 @@ DB を開くと、保存されているバージョンより新しい移行だ�
 差額は、収入が多ければ `+` を付けて収入の色、支出が多ければ `-` を付けて支出の色で出す。
 スマホ幅では、3つの項目を縦に積む。
 
+その下に、今月の支出をカテゴリ別に円グラフで出す（`ExpenseByCategoryChart`）。
+数え方は `src/domain/summary/byCategory.ts` の `calculateExpenseByCategory` と同じで、多い順に並べる。
+扇の色はカテゴリの表示色にする。凡例は Chart.js のものを使わず、グラフの下にカテゴリ・金額・割合の一覧を出す。
+消されたカテゴリの支出は「（削除済み）」の名前と `--color-text-muted` の色で出す。今月の支出が無ければ、グラフを描かない。
+
 ## グラフ
 
 グラフは `src/components/charts/` の `Chart` で描く。中では Chart.js を使う。

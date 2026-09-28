@@ -2,6 +2,10 @@
   max-width: 40rem;
 }
 
+.dashboard-section + .dashboard-section {
+  margin-top: var(--space-6);
+}
+
 /* 収入・支出・差額を横に並べる */
 .dashboard-summary {
   display: grid;
@@ -55,4 +59,45 @@
     font-size: var(--font-size-lg);
     text-align: right;
   }
+}
+
+/* カテゴリ別の支出：円グラフの下に、カテゴリ・金額・割合の一覧を置く */
+.expense-by-category-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.expense-by-category-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.expense-by-category-swatch {
+  flex: none;
+  width: var(--space-4);
+  height: var(--space-4);
+  border-radius: 50%;
+}
+
+.expense-by-category-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.expense-by-category-amount,
+.expense-by-category-percent {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.expense-by-category-percent {
+  flex: none;
+  min-width: 3em;
+  color: var(--color-text-muted);
 }
