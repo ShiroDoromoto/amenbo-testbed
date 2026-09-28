@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Category } from '../../domain/category.ts';
 import type { Transaction } from '../../domain/transaction.ts';
-import { calculateAnnualReport } from './calculateAnnualReport.ts';
+import { calculateReport, reportMonths, yearPeriod } from './calculateReport.ts';
 
 let nextId = 0;
 
@@ -29,7 +29,39 @@ const categories = [
   category('salary', 'income', 0),
 ];
 
-describe('calculateAnnualReport', () => {
+describe('yearPeriod', () => {
+  it('その年の 1月1日から 12月31日までにする', () => {
+    expect(yearPeriod(2026)).toEqual({ from: '2026-01-01', to: '2026-12-31' });
+    expect(yearPeriod(999)).toEqual({ from: '0999-01-01', to: '0999-12-31' });
+  });
+});
+
+describe('reportMonths', () => {
+  it('期間がかかる月の 1 日を、年をまたいで古い順に返す', () => {
+    expect(reportMonths({ from: '2025-11-20', to: '2026-01-05' })).toEqual([
+      '2025-11-01',
+      '2025-12-01',
+      '2026-01-01',
+    ]);
+  });
+
+  it('1か月の中の期間なら、その月だけを返す', () => {
+    expect(reportMonths({ from: '2026-03-10', to: '2026-03-10' })).toEqual(['2026-03-01']);
+  });
+
+  it('9999年12月で終わる期間も返す', () => {
+    expect(reportMonths({ from: '9999-11-01', to: '9999-12-31' })).toEqual([
+      '9999-11-01',
+      '9999-12-01',
+    ]);
+  });
+
+  it('始まりが終わりより後なら空を返す', () => {
+    expect(reportMonths({ from: '2026-02-01', to: '2026-01-31' })).toEqual([]);
+  });
+});
+
+describe('calculateReport', () => {
   it('収入と支出を分けて、カテゴリごと・月ごとに合計する', () => {
     const transactions = [
       entry('expense', '2026-01-05', 'food', 1000),
@@ -38,7 +70,8 @@ describe('calculateAnnualReport', () => {
       entry('expense', '2026-12-31', 'rent', 80000),
       entry('income', '2026-01-25', 'salary', 250000),
     ];
-    expect(calculateAnnualReport(transactions, categories, 2026)).toEqual({
+    expect(calculateReport(transactions, categories, yearPeriod(2026))).toEqual({
+      months: Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, '0')}-01`),
       expense: {
         rows: [
           { categoryId: 'food', months: months({ 1: 1500, 3: 2000 }), total: 3500 },
@@ -70,7 +103,7 @@ describe('calculateAnnualReport', () => {
         toAccountId: 'wallet',
       },
     ];
-    const report = calculateAnnualReport(transactions, categories, 2026);
+    const report = calculateReport(transactions, categories, yearPeriod(2026));
     expect(report.expense.rows).toEqual([
       { categoryId: 'food', months: months({ 1: 10 }), total: 10 },
     ]);
@@ -84,7 +117,7 @@ describe('calculateAnnualReport', () => {
       entry('expense', '2026-02-01', 'gone-a', 1),
       entry('expense', '2026-02-01', 'food', 1),
     ];
-    const report = calculateAnnualReport(transactions, categories, 2026);
+    const report = calculateReport(transactions, categories, yearPeriod(2026));
     expect(report.expense.rows.map((row) => row.categoryId)).toEqual([
       'food',
       'rent',
@@ -93,9 +126,32 @@ describe('calculateAnnualReport', () => {
     ]);
   });
 
+  it('年をまたぐ期間では、期間に入る日の取引だけを、列の月に振り分ける', () => {
+    const transactions = [
+      entry('expense', '2025-11-19', 'food', 1),
+      entry('expense', '2025-11-20', 'food', 10),
+      entry('expense', '2025-12-31', 'food', 100),
+      entry('expense', '2026-01-05', 'rent', 1000),
+      entry('expense', '2026-01-06', 'rent', 10000),
+    ];
+    const report = calculateReport(transactions, categories, {
+      from: '2025-11-20',
+      to: '2026-01-05',
+    });
+    expect(report.months).toEqual(['2025-11-01', '2025-12-01', '2026-01-01']);
+    expect(report.expense).toEqual({
+      rows: [
+        { categoryId: 'food', months: [10, 100, 0], total: 110 },
+        { categoryId: 'rent', months: [0, 0, 1000], total: 1000 },
+      ],
+      months: [10, 100, 1000],
+      total: 1110,
+    });
+  });
+
   it('金額が整数でなければ例外を投げる', () => {
     expect(() =>
-      calculateAnnualReport([entry('expense', '2026-01-01', 'food', 0.5)], categories, 2026),
+      calculateReport([entry('expense', '2026-01-01', 'food', 0.5)], categories, yearPeriod(2026)),
     ).toThrow(RangeError);
   });
 
@@ -104,6 +160,6 @@ describe('calculateAnnualReport', () => {
       entry('income', '2026-01-01', 'salary', Number.MAX_SAFE_INTEGER),
       entry('income', '2026-02-01', 'salary', 1),
     ];
-    expect(() => calculateAnnualReport(transactions, categories, 2026)).toThrow(RangeError);
+    expect(() => calculateReport(transactions, categories, yearPeriod(2026))).toThrow(RangeError);
   });
 });
