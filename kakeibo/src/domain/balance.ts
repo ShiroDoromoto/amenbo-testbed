@@ -1,3 +1,4 @@
+import { addMonths, endOfMonth, startOfMonth, type DateString } from '../lib/date.ts';
 import { sumYen, type Yen } from '../lib/money.ts';
 import type { Account } from './account.ts';
 import type { Transaction } from './transaction.ts';
@@ -36,4 +37,37 @@ export function calculateBalances(
   }
 
   return new Map([...movements].map(([accountId, amounts]) => [accountId, sumYen(amounts)]));
+}
+
+/** 残高の推移に並べる月の数。 */
+export const BALANCE_TREND_MONTHS = 12;
+
+/** 残高の推移の中の1か月分。 */
+export interface BalanceTrendPoint {
+  /** その月の 1 日。 */
+  month: DateString;
+  /** その月の末日の時点での、すべての口座の残高の合計。 */
+  balance: Yen;
+}
+
+/**
+ * `month` を含む月までの直近 12 か月について、月末の時点での残高の合計を計算する。`month` はその月のどの日付でもよい。
+ *
+ * 古い月から順に 12 件を返す。最後の 1 件が `month` を含む月になる。
+ * 各月の残高は、`date` がその月の末日までの取引を `calculateBalances` と同じ数え方で積み、すべての口座について足したもの。
+ * `month` が `YYYY-MM-DD` でないときや、金額が整数でないとき、残高が扱える範囲を超えたときは例外を投げる。
+ */
+export function calculateBalanceTrend(
+  accounts: readonly Account[],
+  transactions: readonly Transaction[],
+  month: DateString,
+): BalanceTrendPoint[] {
+  const last = startOfMonth(month);
+  return Array.from({ length: BALANCE_TREND_MONTHS }, (_, i) => {
+    const current = addMonths(last, i - (BALANCE_TREND_MONTHS - 1));
+    const to = endOfMonth(current);
+    const upToMonthEnd = transactions.filter((transaction) => transaction.date <= to);
+    const balances = calculateBalances(accounts, upToMonthEnd);
+    return { month: current, balance: sumYen(balances.values()) };
+  });
 }
