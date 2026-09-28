@@ -1,0 +1,124 @@
+.annual-report-year {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  max-width: 40rem;
+  margin-bottom: var(--space-4);
+}
+
+.annual-report-year button {
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.annual-report-year button:hover:not(:disabled),
+.annual-report-year button:focus-visible {
+  background: var(--color-hover);
+}
+
+.annual-report-year button:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+.annual-report-year-label {
+  font-size: var(--font-size-lg);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.annual-report-section + .annual-report-section {
+  margin-top: var(--space-6);
+}
+
+/* 表は 14 列あるので、幅が足りなければ表だけを横にスクロールする */
+.annual-report-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.annual-report-scroll:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.annual-report-table {
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.annual-report-table caption {
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  text-align: left;
+}
+
+.annual-report-table th,
+.annual-report-table td {
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.annual-report-table thead th {
+  font-weight: normal;
+  color: var(--color-text-muted);
+  text-align: right;
+}
+
+.annual-report-table td {
+  text-align: right;
+}
+
+/* カテゴリの列は、横にスクロールしても左に残す */
+.annual-report-table th[scope='row'],
+.annual-report-table thead th:first-child {
+  position: sticky;
+  left: 0;
+  max-width: 10em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: normal;
+  text-align: left;
+  background: var(--color-bg);
+}
+
+.annual-report-table tfoot th,
+.annual-report-table tfoot td,
+.annual-report-table .annual-report-total {
+  font-weight: bold;
+}
+
+.annual-report-table tfoot th,
+.annual-report-table tfoot td {
+  border-top-width: 2px;
+}
+
+.annual-report-table-income tfoot td {
+  color: var(--color-income);
+}
+
+.annual-report-table-expense tfoot td {
+  color: var(--color-expense);
+}
+
+.annual-report-zero,
+.annual-report-missing {
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 640px) {
+  .annual-report-table th[scope='row'],
+  .annual-report-table thead th:first-child {
+    max-width: 6em;
+  }
+}

@@ -8,6 +8,7 @@ import { Dashboard } from '../pages/dashboard/Dashboard.tsx';
 import { EditRecurringPage } from '../pages/recurring/EditRecurringPage.tsx';
 import { NewRecurringPage } from '../pages/recurring/NewRecurringPage.tsx';
 import { RecurringList } from '../pages/recurring/RecurringList.tsx';
+import { AnnualReport } from '../pages/report/AnnualReport.tsx';
 import { EditTransactionPage } from '../pages/transactions/EditTransactionPage.tsx';
 import { NewTransactionPage } from '../pages/transactions/NewTransactionPage.tsx';
 import { TransactionList } from '../pages/transactions/TransactionList.tsx';
@@ -20,6 +21,7 @@ const pages: Readonly<Record<string, () => ComponentChildren>> = {
   '/recurring': () => <RecurringList />,
   '/accounts': () => <AccountList />,
   '/categories': () => <CategoryList />,
+  '/reports': () => <AnnualReport />,
 };
 
 // 画面がまだ無い項目は、見出しだけを出す。
