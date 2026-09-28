@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Account } from './account.ts';
-import { calculateBalances } from './balance.ts';
+import { BALANCE_TREND_MONTHS, calculateBalanceTrend, calculateBalances } from './balance.ts';
 import type { Transaction } from './transaction.ts';
 
 const wallet: Account = {
@@ -30,11 +30,11 @@ const card: Account = {
 
 let nextId = 0;
 
-function income(accountId: string, amount: number): Transaction {
+function income(accountId: string, amount: number, date = '2026-09-01'): Transaction {
   return {
     id: `t${nextId++}`,
     type: 'income',
-    date: '2026-09-01',
+    date,
     amount,
     memo: '',
     categoryId: 'salary',
@@ -42,11 +42,11 @@ function income(accountId: string, amount: number): Transaction {
   };
 }
 
-function expense(accountId: string, amount: number): Transaction {
+function expense(accountId: string, amount: number, date = '2026-09-01'): Transaction {
   return {
     id: `t${nextId++}`,
     type: 'expense',
-    date: '2026-09-01',
+    date,
     amount,
     memo: '',
     categoryId: 'food',
@@ -54,11 +54,16 @@ function expense(accountId: string, amount: number): Transaction {
   };
 }
 
-function transfer(accountId: string, toAccountId: string, amount: number): Transaction {
+function transfer(
+  accountId: string,
+  toAccountId: string,
+  amount: number,
+  date = '2026-09-01',
+): Transaction {
   return {
     id: `t${nextId++}`,
     type: 'transfer',
-    date: '2026-09-01',
+    date,
     amount,
     memo: '',
     accountId,
@@ -115,5 +120,70 @@ describe('calculateBalances', () => {
   it('throws when a balance goes beyond the safe integer range', () => {
     const rich: Account = { ...bank, initialBalance: Number.MAX_SAFE_INTEGER };
     expect(() => calculateBalances([rich], [income('bank', 1)])).toThrow(RangeError);
+  });
+});
+
+describe('calculateBalanceTrend', () => {
+  it('returns 12 months ending with the month that contains the given date', () => {
+    const trend = calculateBalanceTrend([wallet], [], '2026-09-17');
+    expect(trend).toHaveLength(BALANCE_TREND_MONTHS);
+    expect(trend[0]?.month).toBe('2025-10-01');
+    expect(trend.at(-1)?.month).toBe('2026-09-01');
+  });
+
+  it('returns the sum of the initial balances when there are no transactions', () => {
+    const trend = calculateBalanceTrend([wallet, bank, card], [], '2026-09-01');
+    expect(trend.every((point) => point.balance === 85000)).toBe(true);
+  });
+
+  it('carries the balance forward from month to month', () => {
+    const trend = calculateBalanceTrend(
+      [wallet, bank],
+      [
+        income('bank', 200000, '2025-12-25'),
+        expense('wallet', 3000, '2026-01-10'),
+        expense('bank', 50000, '2026-08-31'),
+      ],
+      '2026-09-30',
+    );
+    const balanceOf = (month: string) => trend.find((point) => point.month === month)?.balance;
+    expect(balanceOf('2025-11-01')).toBe(105000);
+    expect(balanceOf('2025-12-01')).toBe(305000);
+    expect(balanceOf('2026-01-01')).toBe(302000);
+    expect(balanceOf('2026-07-01')).toBe(302000);
+    expect(balanceOf('2026-08-01')).toBe(252000);
+    expect(balanceOf('2026-09-01')).toBe(252000);
+  });
+
+  it('includes transactions from before the first month', () => {
+    const trend = calculateBalanceTrend([bank], [income('bank', 1000, '2020-01-01')], '2026-09-01');
+    expect(trend[0]?.balance).toBe(101000);
+  });
+
+  it('leaves out transactions after the month', () => {
+    const trend = calculateBalanceTrend([bank], [income('bank', 1000, '2026-10-01')], '2026-09-01');
+    expect(trend.at(-1)?.balance).toBe(100000);
+  });
+
+  it('does not change the total with a transfer between known accounts', () => {
+    const trend = calculateBalanceTrend(
+      [wallet, bank],
+      [transfer('bank', 'wallet', 10000, '2026-09-05')],
+      '2026-09-01',
+    );
+    expect(trend.at(-1)?.balance).toBe(105000);
+  });
+
+  it('counts only the side of a transfer that points to a known account', () => {
+    const trend = calculateBalanceTrend(
+      [wallet],
+      [transfer('wallet', 'gone', 500, '2026-09-05')],
+      '2026-09-01',
+    );
+    expect(trend.at(-1)?.balance).toBe(4500);
+  });
+
+  it('throws when the month is not a date', () => {
+    expect(() => calculateBalanceTrend([wallet], [], '2026-09')).toThrow();
   });
 });
