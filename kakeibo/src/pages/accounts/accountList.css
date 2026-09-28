@@ -42,3 +42,8 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
+
+.account-balance-trend {
+  max-width: 40rem;
+  margin-top: var(--space-6);
+}

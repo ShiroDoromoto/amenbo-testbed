@@ -44,7 +44,7 @@ test('カード口座の編集で、締め日と引き落とし日を選んで�
   await expect(main.getByLabel(/^引き落とし日/)).toHaveValue('10');
 });
 
-test('スマホ幅でも、口座の一覧と編集画面が横にはみ出さない', async ({ page }) => {
+test('スマホ幅でも、口座の一覧と残高の推移、編集画面が横にはみ出さない', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
   await page.goto('/#/accounts/new');
   const main = page.getByRole('main');
@@ -59,6 +59,9 @@ test('スマホ幅でも、口座の一覧と編集画面が横にはみ出さ�
     );
   const row = main.getByRole('link', { name: /とても長い/ });
   await expect(row).toBeVisible();
+  const chart = main.getByRole('img', { name: '月末の残高の推移の折れ線グラフ' });
+  await expect(chart).toBeVisible();
+  expect((await chart.boundingBox())!.width).toBeLessThanOrEqual(375);
   expect(await overflow()).toBe(0);
 
   await row.click();
