@@ -271,3 +271,41 @@ test('今月の収支を、前月比と前年同月比で出す', async () => {
     ['差額', '+260,000円 +260%', '+220,000円 +367%'],
   ]);
 });
+
+test('支出の多いカテゴリを、上から 5 件まで出す', async () => {
+  const db = await openKakeiboDB(testDbName);
+  const bank = await addAccount(db, { name: '銀行', type: 'bank', initialBalance: 0 });
+  const expenses = (await listCategories(db)).filter((c) => c.type === 'expense').slice(0, 6);
+  expect(expenses).toHaveLength(6);
+  const base = { accountId: bank.id, memo: '', type: 'expense' as const };
+  for (const [i, category] of expenses.entries()) {
+    await addTransaction(db, {
+      ...base,
+      date: '2026-09-10',
+      amount: (i + 1) * 1000,
+      categoryId: category.id,
+    });
+  }
+  await addTransaction(db, {
+    ...base,
+    date: '2026-08-10',
+    amount: 99000,
+    categoryId: expenses[0]!.id,
+  });
+  db.close();
+
+  renderPage('2026-09-28');
+  const list = await waitFor(() => document.querySelector('.top-expense-categories'));
+
+  expect(document.querySelector('#dashboard-top-categories-heading')?.textContent).toBe(
+    '支出の多いカテゴリ',
+  );
+  expect(
+    [...list.querySelectorAll('li')].map((li) => [
+      li.querySelector('.top-expense-categories-name')?.textContent,
+      li.querySelector('.top-expense-categories-amount')?.textContent,
+    ]),
+  ).toEqual(
+    [5, 4, 3, 2, 1].map((i) => [expenses[i]!.name, `${(i + 1).toLocaleString('en-US')},000円`]),
+  );
+});
