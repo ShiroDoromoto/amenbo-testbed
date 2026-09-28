@@ -43,19 +43,19 @@ async function seedExpenses(page: Page) {
   );
 }
 
-test('スマホ幅でも、年間レポートの表は表の中だけで横にスクロールし、画面ははみ出さない', async ({
+test('スマホ幅でも、レポートの表は表の中だけで横にスクロールし、画面ははみ出さない', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 667 });
   await page.goto('/#/reports?year=2025');
   const main = page.getByRole('main');
-  await expect(main.getByRole('heading', { name: '年間レポート' })).toBeVisible();
+  await expect(main.getByRole('heading', { name: 'レポート', exact: true })).toBeVisible();
   await seedExpenses(page);
   await page.reload();
 
   const table = main.getByRole('table', { name: '2025年の支出（単位：円）' });
   await expect(table).toBeVisible();
-  await expect(table.locator('tfoot .annual-report-total')).toHaveText('14,814,804');
+  await expect(table.locator('tfoot .report-total')).toHaveText('14,814,804');
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -64,4 +64,20 @@ test('スマホ幅でも、年間レポートの表は表の中だけで横に�
   const scroll = main.getByRole('region', { name: '2025年の支出（単位：円）' });
   const scrolls = await scroll.evaluate((el) => el.scrollWidth > el.clientWidth);
   expect(scrolls).toBe(true);
+});
+
+test('スマホ幅でも、期間を指定する欄は画面に収まる', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto('/#/reports?from=2025-04-01&to=2026-03-31');
+  const main = page.getByRole('main');
+  const form = main.getByRole('form', { name: '表示する期間' });
+  await expect(form.getByLabel('開始日')).toHaveValue('2025-04-01');
+  await expect(form.getByLabel('終了日')).toHaveValue('2026-03-31');
+  await expect(form.getByRole('button', { name: '表示' })).toBeVisible();
+  await expect(main.getByText('2025年4月1日〜2026年3月31日の支出はまだありません。')).toBeVisible();
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(0);
 });
