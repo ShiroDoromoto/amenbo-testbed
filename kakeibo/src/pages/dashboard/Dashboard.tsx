@@ -24,6 +24,7 @@ import { hashFromPath } from '../../router/index.ts';
 import { ExpenseByCategoryChart } from './ExpenseByCategoryChart.tsx';
 import { MonthComparison } from './MonthComparison.tsx';
 import { MonthlyTrendChart } from './MonthlyTrendChart.tsx';
+import { TopExpenseCategories } from './TopExpenseCategories.tsx';
 import './dashboard.css';
 
 type Props = {
@@ -56,7 +57,7 @@ function signedYen(amount: number): string {
 
 /**
  * ダッシュボード画面。今月の収入・支出・差額と、その前月比・前年同月比、
- * カテゴリ別の支出の円グラフ、直近 12 か月の収支の棒グラフを出す。
+ * 支出の多いカテゴリの上位 5 件、カテゴリ別の支出の円グラフ、直近 12 か月の収支の棒グラフを出す。
  */
 export function Dashboard({ dbName, today: todayProp }: Props) {
   const [month] = useState(() => startOfMonth(todayProp ?? toDateString(new Date())));
@@ -125,6 +126,12 @@ export function Dashboard({ dbName, today: todayProp }: Props) {
         <section class="dashboard-section" aria-labelledby="dashboard-comparison-heading">
           <h3 id="dashboard-comparison-heading">前月・前年同月との比較</h3>
           <MonthComparison comparison={state.comparison} />
+        </section>
+      )}
+      {state.status === 'loaded' && (
+        <section class="dashboard-section" aria-labelledby="dashboard-top-categories-heading">
+          <h3 id="dashboard-top-categories-heading">支出の多いカテゴリ</h3>
+          <TopExpenseCategories expenses={state.expenses} categories={state.categories} />
         </section>
       )}
       {state.status === 'loaded' && (
