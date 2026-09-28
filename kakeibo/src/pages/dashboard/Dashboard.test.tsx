@@ -309,3 +309,33 @@ test('支出の多いカテゴリを、上から 5 件まで出す', async () =>
     [5, 4, 3, 2, 1].map((i) => [expenses[i]!.name, `${(i + 1).toLocaleString('en-US')},000円`]),
   );
 });
+
+test('今日までの支出から、1日あたりの平均と月末までの見込みを出す', async () => {
+  const db = await openKakeiboDB(testDbName);
+  const bank = await addAccount(db, { name: '銀行', type: 'bank', initialBalance: 0 });
+  const expense = (await listCategories(db)).find((c) => c.type === 'expense')!;
+  const base = { accountId: bank.id, memo: '', type: 'expense' as const, categoryId: expense.id };
+  await addTransaction(db, { ...base, date: '2026-09-01', amount: 50000 });
+  await addTransaction(db, { ...base, date: '2026-09-10', amount: 10000 });
+  // 今日より後の支出と、前の月の支出は数えない
+  await addTransaction(db, { ...base, date: '2026-09-30', amount: 9999 });
+  await addTransaction(db, { ...base, date: '2026-08-31', amount: 9999 });
+  db.close();
+
+  renderPage('2026-09-20');
+  const pace = await waitFor(() => document.querySelector('.expense-pace'));
+
+  expect(document.querySelector('#dashboard-pace-heading')?.textContent).toBe('支出のペース');
+  expect(
+    [...pace.querySelectorAll('.expense-pace-item')].map((item) => [
+      item.querySelector('dt')?.textContent,
+      item.querySelector('dd')?.textContent,
+    ]),
+  ).toEqual([
+    ['1日あたりの平均', '3,000円'],
+    ['月末までの見込み', '90,000円'],
+  ]);
+  expect(document.querySelector('.expense-pace-note')?.textContent).toBe(
+    '9月1日〜20日（20日間）の支出 60,000円 から計算しています。',
+  );
+});

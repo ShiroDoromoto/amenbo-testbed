@@ -8,6 +8,7 @@ import {
   calculateMonthlyComparison,
   type MonthlyComparison,
 } from '../../domain/summary/comparison.ts';
+import { calculateExpensePace, type ExpensePace } from '../../domain/summary/pace.ts';
 import { calculateMonthlyTrend, type MonthlyTrendPoint } from '../../domain/summary/trend.ts';
 import { openKakeiboDB } from '../../db/index.ts';
 import { listCategories } from '../../db/repositories/categories.ts';
@@ -22,6 +23,7 @@ import {
 import { formatYen } from '../../lib/money.ts';
 import { hashFromPath } from '../../router/index.ts';
 import { ExpenseByCategoryChart } from './ExpenseByCategoryChart.tsx';
+import { ExpensePaceSummary } from './ExpensePaceSummary.tsx';
 import { MonthComparison } from './MonthComparison.tsx';
 import { MonthlyTrendChart } from './MonthlyTrendChart.tsx';
 import { TopExpenseCategories } from './TopExpenseCategories.tsx';
@@ -40,6 +42,7 @@ type State =
   | {
       status: 'loaded';
       comparison: MonthlyComparison;
+      pace: ExpensePace;
       expenses: CategoryExpense[];
       categories: Category[];
       trend: MonthlyTrendPoint[];
@@ -50,17 +53,22 @@ function monthLabel(month: DateString): string {
   return `${year}年${monthNumber}月`;
 }
 
+function monthNumberOf(month: DateString): number {
+  return Number(month.slice(5, 7));
+}
+
 /** 差額が正なら `+` を付ける。負なら `formatYen` が `-` を付ける。 */
 function signedYen(amount: number): string {
   return amount > 0 ? `+${formatYen(amount)}` : formatYen(amount);
 }
 
 /**
- * ダッシュボード画面。今月の収入・支出・差額と、その前月比・前年同月比、
- * 支出の多いカテゴリの上位 5 件、カテゴリ別の支出の円グラフ、直近 12 か月の収支の棒グラフを出す。
+ * ダッシュボード画面。今月の収入・支出・差額と、1日あたりの平均支出・月末までの支出見込み、
+ * その前月比・前年同月比、支出の多いカテゴリの上位 5 件、カテゴリ別の支出の円グラフ、直近 12 か月の収支の棒グラフを出す。
  */
 export function Dashboard({ dbName, today: todayProp }: Props) {
-  const [month] = useState(() => startOfMonth(todayProp ?? toDateString(new Date())));
+  const [today] = useState(() => todayProp ?? toDateString(new Date()));
+  const month = startOfMonth(today);
   const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {
@@ -76,9 +84,18 @@ export function Dashboard({ dbName, today: todayProp }: Props) {
           listCategories(db),
         ]);
         const comparison = calculateMonthlyComparison(transactions, month);
+        const pace = calculateExpensePace(transactions, today);
         const expenses = calculateExpenseByCategory(transactions, month);
         const trend = calculateMonthlyTrend(transactions, month);
-        if (!cancelled) setState({ status: 'loaded', comparison, expenses, categories, trend });
+        if (!cancelled)
+          setState({
+            status: 'loaded',
+            comparison,
+            pace,
+            expenses,
+            categories,
+            trend,
+          });
       } catch {
         if (!cancelled) setState({ status: 'failed' });
       }
@@ -87,7 +104,7 @@ export function Dashboard({ dbName, today: todayProp }: Props) {
       cancelled = true;
       void opening.then((db) => db.close()).catch(() => {});
     };
-  }, [dbName, month]);
+  }, [dbName, month, today]);
 
   function body() {
     if (state.status === 'loading') return <p>読み込み中…</p>;
@@ -122,6 +139,12 @@ export function Dashboard({ dbName, today: todayProp }: Props) {
           <a href={hashFromPath('/transactions')}>今月の取引を見る</a>
         </p>
       </section>
+      {state.status === 'loaded' && (
+        <section class="dashboard-section" aria-labelledby="dashboard-pace-heading">
+          <h3 id="dashboard-pace-heading">支出のペース</h3>
+          <ExpensePaceSummary pace={state.pace} monthNumber={monthNumberOf(month)} />
+        </section>
+      )}
       {state.status === 'loaded' && (
         <section class="dashboard-section" aria-labelledby="dashboard-comparison-heading">
           <h3 id="dashboard-comparison-heading">前月・前年同月との比較</h3>
