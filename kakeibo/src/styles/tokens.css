@@ -40,6 +40,10 @@
   --font-size-xl: 1.5rem;
   --line-height: 1.5;
 
+  /* グラフの高さ（sm はスマホ幅） */
+  --size-chart-height: 16rem;
+  --size-chart-height-sm: 12rem;
+
   /* 角丸と影 */
   --radius-md: 0.5rem;
   --shadow-overlay: 0 0.25rem 0.75rem rgb(0 0 0 / 20%);
